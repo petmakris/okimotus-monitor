@@ -521,14 +521,18 @@ class SimpleMonitorGUI:
             # Simple dialog
             port_window = tk.Toplevel(self.root)
             port_window.title("Select Port")
-            port_window.geometry("400x300")
+            port_window.geometry("500x300")
             port_window.transient(self.root)
             port_window.grab_set()
             
-            ttk.Label(port_window, text="Select a port:", font=('Arial', 12)).pack(pady=10)
+            ttk.Label(port_window, text="Select a port:", style='Large.TLabel').pack(pady=10)
             
-            listbox = tk.Listbox(port_window)
-            listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            # Create frame for listbox to control sizing better
+            listbox_frame = tk.Frame(port_window)
+            listbox_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=(0, 10))
+            
+            listbox = tk.Listbox(listbox_frame, font=self.table_font, height=6)
+            listbox.pack(fill=tk.BOTH, expand=True)
             
             for port, desc, _ in ports:
                 listbox.insert(tk.END, f"{port} - {desc}")
@@ -542,7 +546,8 @@ class SimpleMonitorGUI:
                     self.setup_serial()
                     port_window.destroy()
             
-            ttk.Button(port_window, text="Select", command=select, style='Large.TButton').pack(pady=10)
+            # Button at the bottom with proper spacing
+            ttk.Button(port_window, text="Select", command=select, style='Large.TButton').pack(pady=(0, 15))
             
         except Exception as e:
             print(f"Error in port selection: {e}")

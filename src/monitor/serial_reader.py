@@ -199,10 +199,23 @@ class SerialReader:
 
 
 def list_serial_ports() -> List[tuple]:
-    """List available serial ports"""
+    """List available serial ports, filtering out generic/unknown ports"""
     ports = []
     for port, desc, hwid in sorted(comports()):
-        ports.append((port, desc, hwid))
+        # Filter out ports with meaningless descriptions
+        if desc and desc.lower() not in ['n/a', 'unknown', '']:
+            ports.append((port, desc, hwid))
+        # Also include ports that might have useful hardware IDs even if desc is poor
+        elif hwid and 'USB' in hwid.upper() and desc.lower() == 'n/a':
+            # Keep USB devices even if description is n/a
+            ports.append((port, f"USB Device ({port})", hwid))
+    
+    # If no meaningful ports found, fall back to showing all ports
+    # (in case user has unusual setup)
+    if not ports:
+        for port, desc, hwid in sorted(comports()):
+            ports.append((port, desc or 'Unknown', hwid))
+    
     return ports
 
 
