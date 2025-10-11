@@ -1,8 +1,14 @@
 # Monitor Tool - Complete Guide
 
-**Real-time GUI for Microcontroller Data Visualization**
+**Real-time GUI for Microcontroller Data Visualization with Enhanced UI**
 
 > 💡 **Quick Start:** `monitor --create-config` → edit config → `monitor -c config.json -p /dev/ttyUSB0`
+
+![Main Interface](ui-1.png)
+*Enhanced UI with transformation dropdowns and larger fonts for electronics bench viewing*
+
+![Port Selection](ui-2.png)
+*Clean port selection dialog showing only meaningful devices*
 
 ---
 
@@ -24,20 +30,34 @@
 
 ## Overview
 
-**Monitor** displays real-time comma-separated data from microcontrollers via serial communication, with automatic value transformations and grid-aligned visualization.
+**Monitor** displays real-time comma-separated data from microcontrollers via serial communication, with automatic value transformations and a professional table-based visualization optimized for electronics bench use.
 
 ### Features
 
-- ✅ Real-time serial visualization
-- ✅ Mathematical transformations (divide, multiply, add, subtract, power)
-- ✅ Grid-aligned layout with color coding
-- ✅ Change tracking with timestamps
-- ✅ Visual feedback on updates
-- ✅ JSON configuration system
+- ✅ **Enhanced Table Interface** - Professional aligned data display with sortable columns
+- ✅ **Interactive Transformations** - Dropdown menus to select and view intermediate calculation steps
+- ✅ **Large Fonts** - Optimized for viewing from 1-1.5 meters at electronics bench
+- ✅ **Smart Port Selection** - Filtered list showing only meaningful serial devices
+- ✅ **Mathematical Transformations** - Apply operations in series (divide, multiply, add, subtract, power)
+- ✅ **Real-time Updates** - Live data with change tracking and timestamps
+- ✅ **Visual Feedback** - Status indicators for data reception and value changes
+- ✅ **JSON Configuration** - Flexible setup with comprehensive formatting options
+
+### New UI Enhancements
+
+- **Table-based Layout**: Clean, aligned columns replacing scattered field widgets
+- **Transformation Dropdowns**: Interactive selection between raw values, intermediate steps, and final results
+- **Electronics Bench Optimized**: Larger fonts and wider interface for distance viewing
+- **Stable Interface**: Rock-solid dropdowns that don't flicker during data updates
+- **Clean Port Selection**: Filtered device list excluding generic/meaningless ports
 
 ### Use Cases
 
 - Encoder monitoring (counts → rotations → degrees)
+- Sensor readings (ADC → voltage, temperature conversions)
+- Motor control (PWM → percentage, speed monitoring)
+- Multi-sensor dashboards
+- Electronics bench testing and debugging
 - Sensor readings (ADC → voltage, temperature conversions)
 - Motor control (PWM → percentage, speed monitoring)
 - Multi-sensor dashboards
@@ -134,16 +154,31 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 
 | Control | Function |
 |---------|----------|
-| **Connect/Disconnect** | Toggle connection |
-| **Clear Values** | Reset to `---` |
-| **Scrollbar** | Navigate fields |
-| **Status Bar** | Shows stats & time |
+| **Connect/Disconnect** | Toggle serial connection |
+| **Clear Values** | Reset all fields to `---` |
+| **Select Port** | Open filtered port selection dialog |
+| **Transform Dropdowns** | Select transformation view per field |
+| **Table Scrolling** | Navigate fields with mouse wheel |
+| **Status Bar** | Connection status, statistics & timing |
+
+**Table Columns:**
+- **Field**: Field name/label
+- **Raw Value**: Original data from MCU
+- **Transformed Value**: Result after selected transformation
+- **Transform**: Dropdown to select transformation step
+- **Status**: Reception and change timing
+
+**Transformation Options:**
+- **Raw Value**: Original formatted data
+- **[Transform Name]**: Specific intermediate transformation step
+- **All Transforms (Final)**: Result after all transformations applied
 
 **Visual Indicators:**
-- Light blue flash = Value changed
-- Light green flash = Transform updated
-- `rx: now` (blue) = Data received
-- `ch: 5s ago` (green) = Value changed
+- `rx: now` = Data received recently
+- `ch: 5s ago` = Value last changed 5 seconds ago
+- `No data` = No data received yet
+- Green text = Connected status
+- Red text = Disconnected status
 
 ---
 
@@ -204,12 +239,21 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 
 ### Window Sizing
 
-| Fields | Transforms | Size (W × H) |
-|--------|-----------|--------------|
-| 1-3 | 0 | 800 × 400 |
-| 1-5 | 1 | 1000 × 450 |
-| 1-5 | 2 | 1200 × 500 |
-| 3-6 | 2-3 | 1400 × 600 |
+**Default:** 1200×480 (optimized for electronics bench viewing)
+
+**Recommended sizes based on content:**
+
+| Fields | Transforms | Size (W × H) | Use Case |
+|--------|-----------|--------------|----------|
+| 1-3 | 0 | 1000 × 400 | Simple monitoring |
+| 1-5 | 1 | 1200 × 480 | Standard bench setup |
+| 1-5 | 2+ | 1400 × 500 | Multiple transformations |
+| 3-6 | 2-3 | 1600 × 600 | Complex multi-sensor |
+
+**Large Font Considerations:**
+- Fonts optimized for 1-1.5 meter viewing distance
+- Wider columns accommodate larger text
+- Taller rows (25px) for better readability
 
 ---
 
@@ -418,10 +462,29 @@ Operation: multiply, Value: V/count
 }
 ```
 
-**Display:**
+**Enhanced Table Display:**
 ```
-Encoder | 3200 counts | Rotations: 2.000 rev | Degrees: 720.0°
+| Field     | Raw Value | Transformed Value | Transform            | Status        |
+|-----------|-----------|-------------------|---------------------|---------------|
+| Time      | 13,871    | 13.871 s         | [All Transforms ▼] | rx: now       |
+| Encoder 1 | 15,616    | 2.2 °            | [Degrees ▼]        | ch: now       |
+| Encoder 2 | 0         | 0.000 rev        | [All Transforms ▼] | rx: now       |
 ```
+
+**Interactive Transformation Selection:**
+- **Raw Value**: Shows original formatted data (13,871 counts)
+- **Rotations**: Shows intermediate step (9.760 rev)
+- **Degrees**: Shows specific transformation (2.2 °)
+- **All Transforms (Final)**: Shows result after all operations applied (default)
+
+### Transformation Processing
+
+Transformations are applied **in series** (step by step):
+
+1. **Raw Input**: `15,616 counts`
+2. **Step 1** (Rotations): `15,616 ÷ 1600 = 9.760 rev`  
+3. **Step 2** (Degrees): `9.760 × 0.225 = 2.2 °`
+4. **Final Result**: `2.2 °` (displayed by default)
 
 ---
 
@@ -553,13 +616,13 @@ Python format strings control display formatting. Use in `"format"` fields.
 ```json
 {
   "title": "Phase Tracker",
-  "window": {"width": 1400, "height": 500},
+  "window": {"width": 1200, "height": 480},
   "fields": {
     "0": {
       "label": "Time",
       "type": "int",
       "format": "{:,}",
-      "unit": "ms",
+      "unit": "counts",
       "transformations": [{
         "label": "Seconds",
         "operation": "divide",
@@ -768,10 +831,40 @@ sudo monitor -c config.json -p /dev/ttyUSB0
 ### GUI Performance Issues
 
 **Solutions:**
-- Reduce MCU update rate
+- Reduce MCU update rate (< 100Hz recommended)
 - Increase `refresh_rate` in config
-- Reduce transformations
 - Use simpler format strings
+- Reduce number of transformations
+
+### Transformation Dropdown Issues
+
+**Symptoms:** Dropdowns not visible or misaligned
+
+**Solutions:**
+- Resize window to refresh layout
+- Check window is large enough for content
+- Restart application if dropdowns disappear
+
+### Port Selection Issues
+
+**Symptoms:** Expected ports not showing in selection dialog
+
+**Solutions:**
+- Check device is properly connected
+- Try different USB port
+- Verify drivers installed (Windows)
+- Use `monitor --list-ports` to see all devices
+- Some ports filtered out if description is "n/a"
+
+### Large Font Display Issues
+
+**Symptoms:** Text cut off or overlapping
+
+**Solutions:**
+- Increase window size in config
+- Use smaller format strings
+- Reduce field label length
+- Adjust column widths programmatically
 
 ### Configuration Errors
 
@@ -827,13 +920,25 @@ Encoder 1: 400 PPR × 4 = 1600 counts/rev
 Degrees: 360 / 1600 = 0.225 °/count
 ```
 
-### 4. Use Meaningful Colors
+### 4. Optimize for Electronics Bench
 
-- Red: Warnings, critical
-- Green: Normal, encoders
-- Blue: Time, status
+**Window Positioning:**
+- Place monitor at eye level distance (1-1.5m)
+- Use large window size (1200×480 minimum)
+- Position away from direct lighting
 
-### 5. Backup Configs
+**UI Usage:**
+- Use transformation dropdowns to debug calculations
+- Set default to "All Transforms (Final)" for normal monitoring
+- Switch to intermediate steps when troubleshooting
+
+### 5. Use Meaningful Colors
+
+- Red: Warnings, critical values
+- Green: Normal operation, encoders
+- Blue: Time, status information
+
+### 6. Backup Configs
 
 ```
 configs/
@@ -843,14 +948,26 @@ configs/
 └── debug.json
 ```
 
-### 6. Format String Tips
+### 7. Transformation Best Practices
+
+**Design for Clarity:**
+- Use descriptive transformation labels
+- Order transformations logically (simple → complex)
+- Test each step individually using dropdowns
+
+**Common Calculation Patterns:**
+- Raw → Engineering units → Display units
+- Counts → Rotations → Degrees/Radians
+- ADC → Voltage → Scaled measurement
+
+### 8. Format String Tips
 
 - Start with `"{}"`, add formatting later
 - Test in Python: `print(f"{123.456:.2f}")`
 - Common: `"{:width.precision type}"`
 - `.2f` for money, `.3f` for measurements
 
-### 7. Transformation Calculations
+### 9. Transformation Calculations
 
 **Encoder to rotations:**
 ```
