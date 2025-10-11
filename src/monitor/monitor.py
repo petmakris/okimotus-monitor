@@ -5,9 +5,12 @@ import logging
 import sys
 import os
 
-from .config import MonitorConfig, create_default_config_file
-from .gui import MonitorGUI
-from .serial_reader import list_serial_ports
+# Add the parent directory to the path so we can import monitor modules
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+
+from monitor.config import MonitorConfig, create_default_config_file
+from monitor.gui_simple import SimpleMonitorGUI as MonitorGUI
+from monitor.serial_reader import list_serial_ports
 
 def ask_for_port():
     """Interactive port selection"""
@@ -43,8 +46,9 @@ def ask_for_port():
             
             print("Port not found, try again")
             
-        except KeyboardInterrupt:
-            print("\nCancelled")
+        except (KeyboardInterrupt, EOFError):
+            print("\nCancelled or no interactive terminal available")
+            return None
             return None
 
 
@@ -181,27 +185,24 @@ MCU Data Format:
     if args.ask_port:
         port = ask_for_port()
         if not port:
-            print("No port selected")
-            sys.exit(1)
+            print("No port selected, you can select one from the GUI")
     elif args.port:
         port = args.port
     else:
-        # Try to auto-select or ask
+        # Try to auto-select or show available ports
         ports = list_serial_ports()
         if len(ports) == 1:
             port = ports[0][0]
             print(f"Auto-selected port: {port}")
         elif len(ports) > 1:
-            print("Multiple ports available. Please specify one with -p <port> or use --ask-port")
+            print("Multiple ports available. You can select one from the GUI or specify with -p <port>")
             print("Available ports:")
             for p, desc, _ in ports:
                 print(f"  {p} - {desc}")
-            sys.exit(1)
         else:
-            print("No serial port specified. Running in demo mode (no data will be received).")
-            print("Use -p <port> to connect to a serial device, or --list-ports to see available ports.")
+            print("No serial ports found. You can still use the GUI and connect later.")
     
-    # Create and run GUI
+    # Create and run GUI (always create it, even without a port)
     try:
         gui = MonitorGUI(config, port, args.baudrate)
         
@@ -209,6 +210,8 @@ MCU Data Format:
         if port:
             print(f"Starting monitor on {port} at {args.baudrate} baud")
             gui.root.after(100, gui.connect)  # Connect after GUI is ready
+        else:
+            print("GUI started. Use 'Select Port' button to choose a serial port.")
         
         gui.run()
         

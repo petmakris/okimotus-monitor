@@ -4,11 +4,13 @@ import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import logging
 import time
+import threading
+import queue
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from .config import MonitorConfig
-from .serial_reader import SerialReader, list_serial_ports
+from monitor.config import MonitorConfig
+from monitor.serial_reader import SerialReader, list_serial_ports
 
 
 
@@ -33,179 +35,6 @@ def time_ago(timestamp):
     else:
         days = int(diff / 86400)
         return f"{days}d ago"
-
-
-class FieldWidget:
-    """Widget for displaying a single field value with transformations in a grid layout"""
-    
-    def __init__(self, parent, position: int, config: Dict[str, Any]):
-        self.position = position
-        self.config = config
-        self.last_received_time = 0   # When any data was last received
-        self.last_changed_time = 0    # When value actually changed
-        self.last_value = None        # Track last value for change detection
-        self.transformation_widgets = []  # Store transformation display widgets
-        
-        # Create main frame for this field row
-        self.frame = ttk.Frame(parent, relief='solid', borderwidth=1)
-        
-        # Configure grid columns with fixed widths
-        self.frame.grid_columnconfigure(0, minsize=120, weight=0)  # Label column
-        self.frame.grid_columnconfigure(1, minsize=150, weight=0)  # Value column
-        
-        # Calculate transformation columns
-        transformations = config.get('transformations', [])
-        for i in range(len(transformations)):
-            self.frame.grid_columnconfigure(2 + i*2, minsize=100, weight=0)     # Transform label
-            self.frame.grid_columnconfigure(2 + i*2 + 1, minsize=120, weight=0) # Transform value
-        
-        # Time column (last)
-        time_col = 2 + len(transformations) * 2
-        self.frame.grid_columnconfigure(time_col, minsize=80, weight=1)  # Time indicators
-        
-        # Row label (field name)
-        label_text = config.get('label', f'Field {position}')
-        self.label = ttk.Label(
-            self.frame, 
-            text=label_text, 
-            font=('Arial', 11, 'bold'),
-            anchor='w',
-            width=15
-        )
-        self.label.grid(row=0, column=0, padx=(8, 4), pady=8, sticky='w')
-        
-        # Original value display
-        self.value_var = tk.StringVar()
-        self.value_var.set('---')
-        
-        value_color = config.get('color', 'black')
-        self.value_label = ttk.Label(
-            self.frame, 
-            textvariable=self.value_var,
-            font=('Arial', 12, 'bold'),
-            foreground=value_color,
-            anchor='e',
-            width=18
-        )
-        self.value_label.grid(row=0, column=1, padx=4, pady=8, sticky='e')
-        
-        # Create transformation columns
-        self.setup_transformation_widgets()
-        
-        # Time indicators in the last column
-        time_frame = ttk.Frame(self.frame)
-        time_frame.grid(row=0, column=time_col, padx=(4, 8), pady=8, sticky='e')
-        
-        # Last received indicator
-        self.received_var = tk.StringVar()
-        self.received_label = ttk.Label(
-            time_frame,
-            textvariable=self.received_var,
-            font=('Arial', 7),
-            foreground='blue'
-        )
-        self.received_label.pack(anchor=tk.E)
-        
-        # Last changed indicator  
-        self.changed_var = tk.StringVar()
-        self.changed_label = ttk.Label(
-            time_frame,
-            textvariable=self.changed_var,
-            font=('Arial', 7),
-            foreground='green'
-        )
-        self.changed_label.pack(anchor=tk.E)
-    
-    def setup_transformation_widgets(self):
-        """Create widgets for displaying transformation results"""
-        transformations = self.config.get('transformations', [])
-        
-        for i, transformation in enumerate(transformations):
-            label_col = 2 + i * 2      # Label column
-            value_col = 2 + i * 2 + 1  # Value column
-            
-            # Transformation label
-            trans_label = ttk.Label(
-                self.frame,
-                text=transformation.get('label', f'Transform {i+1}'),
-                font=('Arial', 9, 'bold'),
-                anchor='w',
-                foreground='darkblue',
-                width=12
-            )
-            trans_label.grid(row=0, column=label_col, padx=4, pady=8, sticky='w')
-            
-            # Transformation value
-            trans_var = tk.StringVar()
-            trans_var.set('---')
-            trans_value_label = ttk.Label(
-                self.frame,
-                textvariable=trans_var,
-                font=('Arial', 10),
-                anchor='e',
-                foreground='darkgreen',
-                width=15
-            )
-            trans_value_label.grid(row=0, column=value_col, padx=4, pady=8, sticky='e')
-            
-            self.transformation_widgets.append({
-                'label': trans_label,
-                'value_var': trans_var,
-                'value_label': trans_value_label,
-                'config': transformation
-            })
-    
-    def update_value(self, raw_value: str, formatted_value: str, transformed_values: List[Dict[str, str]]):
-        """Update the displayed value and transformations, track both received and changed times"""
-        current_time = time.time()
-        value_changed = self.last_value != formatted_value
-        
-        # Always update received time
-        self.last_received_time = current_time
-        
-        # Update changed time only if value actually changed
-        if value_changed:
-            self.last_changed_time = current_time
-            # Flash effect only for actual changes
-            if self.last_value != '---':  # Don't flash on initial value
-                self.value_label.configure(background='lightblue')
-                self.frame.after(200, lambda: self.value_label.configure(background=''))
-        
-        # Update main value
-        self.value_var.set(formatted_value)
-        self.last_value = formatted_value
-        
-        # Update transformation values
-        for i, widget_info in enumerate(self.transformation_widgets):
-            if i < len(transformed_values):
-                trans_data = transformed_values[i]
-                widget_info['value_var'].set(trans_data['value'])
-                
-                # Flash transformation if main value changed
-                if value_changed and self.last_value != '---':
-                    widget_info['value_label'].configure(background='lightgreen')
-                    self.frame.after(300, lambda w=widget_info['value_label']: w.configure(background=''))
-            else:
-                widget_info['value_var'].set('---')
-        
-        # Update both time displays
-        self.update_relative_times()
-    
-    def update_relative_times(self):
-        """Update both relative time displays"""
-        # Received time (blue)
-        if self.last_received_time > 0:
-            received_ago = time_ago(self.last_received_time)
-            self.received_var.set(f"rx: {received_ago}" if received_ago else "rx: now")
-        else:
-            self.received_var.set("")
-        
-        # Changed time (green)
-        if self.last_changed_time > 0:
-            changed_ago = time_ago(self.last_changed_time)
-            self.changed_var.set(f"ch: {changed_ago}" if changed_ago else "ch: now")
-        else:
-            self.changed_var.set("")
 
 
 class StatusBar:
@@ -265,7 +94,17 @@ class MonitorGUI:
         self.port = port
         self.baudrate = baudrate
         self.serial_reader: Optional[SerialReader] = None
-        self.field_widgets: Dict[int, FieldWidget] = {}
+        self.tree_items: Dict[int, Dict] = {}
+        self.running = True
+        
+        # Use a queue for thread-safe communication
+        self.data_queue = queue.Queue()
+        self.update_lock = threading.Lock()
+        
+        # Timers
+        self.stats_timer_id = None
+        self.time_timer_id = None
+        self.queue_timer_id = None
         
         # Create main window
         self.root = tk.Tk()
@@ -273,12 +112,17 @@ class MonitorGUI:
         self.root.geometry(f"{config.window_size[0]}x{config.window_size[1]}")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
+        # Make window responsive
+        self.root.resizable(True, True)
+        
         self.setup_ui()
         self.setup_serial()
         
-        # Auto-update timers
-        self.update_stats_timer()
-        self.update_relative_times_timer()
+        # Ensure GUI is ready before starting timers
+        self.root.update_idletasks()
+        
+        # Start timers with better intervals
+        self.start_timers()
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -314,95 +158,160 @@ class MonitorGUI:
             control_frame,
             text="Clear Values",
             command=self.clear_values
+        ).pack(side=tk.LEFT, padx=(0, 10))
+        
+        ttk.Button(
+            control_frame,
+            text="Select Port",
+            command=self.select_port
         ).pack(side=tk.LEFT)
         
-        # Fields container with scrollbar
-        fields_container = ttk.Frame(main_frame)
-        fields_container.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
-        fields_container.columnconfigure(0, weight=1)
+        # Data table using Treeview for better alignment
+        table_frame = ttk.Frame(main_frame)
+        table_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
+        table_frame.columnconfigure(0, weight=1)
         main_frame.rowconfigure(2, weight=1)
         
-        # Canvas and scrollbar for scrolling
-        canvas = tk.Canvas(fields_container)
-        scrollbar = ttk.Scrollbar(fields_container, orient="vertical", command=canvas.yview)
-        self.scrollable_frame = ttk.Frame(canvas)
-        
-        self.scrollable_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-        
-        canvas.create_window((0, 0), window=self.scrollable_frame, anchor="nw")
-        canvas.configure(yscrollcommand=scrollbar.set)
-        
-        canvas.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
-        scrollbar.grid(row=0, column=1, sticky=(tk.N, tk.S))
-        
-        fields_container.rowconfigure(0, weight=1)
-        fields_container.columnconfigure(0, weight=1)
-        
-        # Create field widgets
-        self.create_field_widgets()
+        # Create treeview with columns
+        self.create_data_table(table_frame)
         
         # Status bar
         self.status_bar = StatusBar(main_frame)
         self.status_bar.frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
     
-    def create_field_widgets(self):
-        """Create widgets for all configured fields"""
+    def create_data_table(self, parent):
+        """Create a properly aligned data table using Treeview"""
+        # Calculate columns based on configured transformations
         positions = self.config.get_all_positions()
-        
-        # Create header row
-        self.create_header_row()
-        
-        for i, position in enumerate(positions):
-            field_config = self.config.get_field_config(position)
-            widget = FieldWidget(self.scrollable_frame, position, field_config)
-            widget.frame.grid(row=i+1, column=0, sticky=(tk.W, tk.E), pady=1, padx=2)
-            self.scrollable_frame.columnconfigure(0, weight=1)
-            
-            self.field_widgets[position] = widget
-    
-    def create_header_row(self):
-        """Create a header row showing column titles"""
-        header_frame = ttk.Frame(self.scrollable_frame, relief='solid', borderwidth=2)
-        header_frame.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=(0, 2), padx=2)
-        
-        # Configure columns same as field widgets
-        header_frame.grid_columnconfigure(0, minsize=120, weight=0)  # Field name
-        header_frame.grid_columnconfigure(1, minsize=150, weight=0)  # Raw value
-        
-        # Find maximum transformations to set up columns
         max_transforms = 0
-        for pos in self.config.get_all_positions():
+        for pos in positions:
             field_config = self.config.get_field_config(pos)
             transforms = field_config.get('transformations', []) if field_config else []
             max_transforms = max(max_transforms, len(transforms))
         
-        # Set up transformation columns
+        # Define columns
+        columns = ['field', 'raw_value']
+        column_headings = ['Field', 'Raw Value']
+        
+        # Add transformation columns
         for i in range(max_transforms):
-            header_frame.grid_columnconfigure(2 + i*2, minsize=100, weight=0)
-            header_frame.grid_columnconfigure(2 + i*2 + 1, minsize=120, weight=0)
+            columns.extend([f'transform_{i+1}', f'value_{i+1}'])
+            column_headings.extend([f'Transform {i+1}', 'Value'])
         
-        # Time column
-        time_col = 2 + max_transforms * 2
-        header_frame.grid_columnconfigure(time_col, minsize=80, weight=1)
+        columns.append('status')
+        column_headings.append('Status')
         
-        # Header labels
-        ttk.Label(header_frame, text="Field", font=('Arial', 10, 'bold'), foreground='navy').grid(
-            row=0, column=0, padx=(8, 4), pady=4, sticky='w')
-        ttk.Label(header_frame, text="Raw Value", font=('Arial', 10, 'bold'), foreground='navy').grid(
-            row=0, column=1, padx=4, pady=4, sticky='e')
+        # Create treeview
+        self.tree = ttk.Treeview(parent, columns=columns, show='headings', height=15)
         
-        # Generic transformation headers
+        # Configure column headings and widths
+        self.tree.heading('field', text='Field')
+        self.tree.column('field', width=120, anchor='w')
+        
+        self.tree.heading('raw_value', text='Raw Value')
+        self.tree.column('raw_value', width=150, anchor='e')
+        
+        # Configure transformation columns
         for i in range(max_transforms):
-            ttk.Label(header_frame, text=f"Transform {i+1}", font=('Arial', 9, 'bold'), foreground='darkblue').grid(
-                row=0, column=2 + i*2, padx=4, pady=4, sticky='w')
-            ttk.Label(header_frame, text="Value", font=('Arial', 9, 'bold'), foreground='darkblue').grid(
-                row=0, column=2 + i*2 + 1, padx=4, pady=4, sticky='e')
+            transform_col = f'transform_{i+1}'
+            value_col = f'value_{i+1}'
+            
+            self.tree.heading(transform_col, text=f'Transform {i+1}')
+            self.tree.column(transform_col, width=100, anchor='w')
+            
+            self.tree.heading(value_col, text='Value')
+            self.tree.column(value_col, width=120, anchor='e')
         
-        ttk.Label(header_frame, text="Status", font=('Arial', 9, 'bold'), foreground='purple').grid(
-            row=0, column=time_col, padx=(4, 8), pady=4, sticky='e')
+        self.tree.heading('status', text='Status')
+        self.tree.column('status', width=80, anchor='e')
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(parent, orient='vertical', command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Grid the widgets
+        self.tree.grid(row=0, column=0, sticky='nsew')
+        scrollbar.grid(row=0, column=1, sticky='ns')
+        
+        parent.rowconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1)
+        
+        # Initialize tree items for each field
+        self.tree_items = {}
+        for position in positions:
+            field_config = self.config.get_field_config(position)
+            field_name = field_config.get('label', f'Field {position}') if field_config else f'Field {position}'
+            
+            # Create initial row data
+            row_data = [field_name, '---']
+            
+            # Add empty transformation columns
+            for i in range(max_transforms):
+                row_data.extend(['---', '---'])
+            
+            row_data.append('---')  # Status column
+            
+            # Insert item and store reference
+            item_id = self.tree.insert('', 'end', values=row_data)
+            self.tree_items[position] = {
+                'item_id': item_id,
+                'last_received_time': 0,
+                'last_changed_time': 0,
+                'last_value': None
+            }
+    
+    def start_timers(self):
+        """Start all periodic timers with better intervals"""
+        try:
+            logging.debug("Starting GUI timers...")
+            
+            # Process data queue frequently but with smaller batches
+            self.process_data_queue()
+            
+            # Update stats less frequently  
+            self.update_stats_timer()
+            
+            # Update times even less frequently
+            self.update_relative_times_timer()
+            
+            logging.debug("GUI timers started successfully")
+        except Exception as e:
+            logging.error(f"Error starting timers: {e}")
+    
+    def process_data_queue(self):
+        """Process incoming data from queue (runs frequently)"""
+        if not self.running:
+            return
+        
+        try:
+            # Process up to 10 items per cycle to avoid blocking
+            processed = 0
+            for _ in range(10):
+                try:
+                    data = self.data_queue.get_nowait()
+                    self._update_widgets_safe(data)
+                    processed += 1
+                except queue.Empty:
+                    break
+                    
+            # Log if we processed data (for debugging)
+            if processed > 0:
+                logging.debug(f"Processed {processed} data items from queue")
+                
+        except Exception as e:
+            logging.warning(f"Error processing data queue: {e}")
+        
+        # Schedule next queue processing (faster interval)
+        if self.running:
+            self.queue_timer_id = self.root.after(50, self.process_data_queue)
+    
+    def create_field_widgets(self):
+        """Legacy method - now replaced by create_data_table"""
+        pass  # This method is no longer needed but kept for compatibility
+    
+    def create_header_row(self):
+        """Legacy method - now replaced by Treeview headers"""
+        pass  # This method is no longer needed but kept for compatibility
     
     def setup_serial(self):
         """Setup serial connection"""
@@ -515,6 +424,77 @@ class MonitorGUI:
         ttk.Button(button_frame, text="Select", command=on_select).pack(side=tk.LEFT, padx=(0, 10))
         ttk.Button(button_frame, text="Cancel", command=port_window.destroy).pack(side=tk.LEFT)
     
+    def select_port(self):
+        """Show port selection dialog"""
+        try:
+            ports = list_serial_ports()
+            
+            if not ports:
+                messagebox.showwarning("No Ports", "No serial ports found")
+                return
+            
+            # Simple selection using a dialog
+            port_names = [f"{port} - {desc}" for port, desc, hwid in ports]
+            
+            # Create a simple selection window
+            selection_window = tk.Toplevel(self.root)
+            selection_window.title("Select Serial Port")
+            selection_window.geometry("500x400")
+            selection_window.transient(self.root)
+            selection_window.grab_set()
+            
+            # Port list
+            ttk.Label(selection_window, text="Available Serial Ports:", font=('Arial', 12)).pack(pady=10)
+            
+            listbox = tk.Listbox(selection_window, height=10)
+            listbox.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
+            
+            for port_name in port_names:
+                listbox.insert(tk.END, port_name)
+            
+            # Baudrate
+            baudrate_frame = ttk.Frame(selection_window)
+            baudrate_frame.pack(pady=10)
+            
+            ttk.Label(baudrate_frame, text="Baudrate:").pack(side=tk.LEFT, padx=(0, 10))
+            baudrate_var = tk.StringVar(value=str(self.baudrate))
+            baudrate_combo = ttk.Combobox(
+                baudrate_frame,
+                textvariable=baudrate_var,
+                values=['9600', '19200', '38400', '57600', '115200', '230400'],
+                width=10,
+                state='readonly'
+            )
+            baudrate_combo.pack(side=tk.LEFT)
+            
+            # Buttons
+            button_frame = ttk.Frame(selection_window)
+            button_frame.pack(pady=20)
+            
+            def on_select():
+                selection = listbox.curselection()
+                if selection:
+                    selected_port = ports[selection[0]][0]
+                    selected_baudrate = int(baudrate_var.get())
+                    
+                    # Disconnect current connection
+                    if self.serial_reader:
+                        self.disconnect()
+                    
+                    # Update settings
+                    self.port = selected_port
+                    self.baudrate = selected_baudrate
+                    self.setup_serial()
+                    
+                    selection_window.destroy()
+            
+            ttk.Button(button_frame, text="Select", command=on_select).pack(side=tk.LEFT, padx=(0, 10))
+            ttk.Button(button_frame, text="Cancel", command=selection_window.destroy).pack(side=tk.LEFT)
+            
+        except Exception as e:
+            logging.error(f"Error in port selection: {e}")
+            messagebox.showerror("Error", f"Failed to list serial ports: {e}")
+
     def load_config(self):
         """Load configuration from file"""
         filename = filedialog.askopenfilename(
@@ -527,12 +507,9 @@ class MonitorGUI:
                 new_config = MonitorConfig(config_file=filename)
                 self.config = new_config
                 
-                # Recreate field widgets
-                for widget in self.field_widgets.values():
-                    widget.frame.destroy()
-                self.field_widgets.clear()
-                
-                self.create_field_widgets()
+                # Recreate data table
+                self.tree.destroy()
+                self.create_data_table(self.tree.master)
                 self.root.title(self.config.title)
                 
                 messagebox.showinfo("Success", f"Configuration loaded from {filename}")
@@ -541,30 +518,102 @@ class MonitorGUI:
     
     def clear_values(self):
         """Clear all displayed values"""
-        for widget in self.field_widgets.values():
-            widget.value_var.set('---')
-            widget.received_var.set('')
-            widget.changed_var.set('')
-            widget.last_value = None
-            widget.last_received_time = 0
-            widget.last_changed_time = 0
-            
-            # Clear transformation values
-            for trans_widget in widget.transformation_widgets:
-                trans_widget['value_var'].set('---')
+        try:
+            with self.update_lock:
+                for position, item_info in self.tree_items.items():
+                    # Get current field name (first column)
+                    current_values = list(self.tree.item(item_info['item_id'], 'values'))
+                    field_name = current_values[0]
+                    
+                    # Reset all values except field name
+                    new_values = [field_name] + ['---'] * (len(current_values) - 1)
+                    self.tree.item(item_info['item_id'], values=new_values)
+                    
+                    # Reset time tracking
+                    item_info['last_received_time'] = 0
+                    item_info['last_changed_time'] = 0
+                    item_info['last_value'] = None
+        except Exception as e:
+            logging.warning(f"Error clearing values: {e}")
     
     def on_serial_data(self, data: Dict[int, str]):
-        """Handle new serial data"""
-        # Update widgets on main thread
-        self.root.after(0, self._update_widgets, data)
+        """Handle new serial data - thread safe"""
+        if self.running:
+            try:
+                # Just put data in queue, don't block
+                self.data_queue.put(data)
+            except Exception as e:
+                logging.warning(f"Error queuing data: {e}")
     
-    def _update_widgets(self, data: Dict[int, str]):
-        """Update field widgets with new data (runs on main thread)"""
-        for position, raw_value in data.items():
-            if position in self.field_widgets:
-                formatted_value = self.config.format_value(position, raw_value)
-                transformed_values = self.config.get_transformed_values(position, raw_value)
-                self.field_widgets[position].update_value(raw_value, formatted_value, transformed_values)
+    def _update_widgets_safe(self, data: Dict[int, str]):
+        """Update table with new data safely"""
+        if not self.running:
+            return
+        
+        try:
+            with self.update_lock:
+                current_time = time.time()
+                
+                for position, raw_value in data.items():
+                    if position in self.tree_items:
+                        self._update_single_item(position, raw_value, current_time)
+        except Exception as e:
+            logging.warning(f"Error updating widgets: {e}")
+    
+    def _update_single_item(self, position: int, raw_value: str, current_time: float):
+        """Update a single tree item"""
+        try:
+            item_info = self.tree_items[position]
+            formatted_value = self.config.format_value(position, raw_value)
+            transformed_values = self.config.get_transformed_values(position, raw_value)
+            
+            # Check if value changed
+            value_changed = item_info['last_value'] != formatted_value
+            
+            # Update timing
+            item_info['last_received_time'] = current_time
+            if value_changed:
+                item_info['last_changed_time'] = current_time
+                item_info['last_value'] = formatted_value
+            
+            # Build new row data
+            current_values = list(self.tree.item(item_info['item_id'], 'values'))
+            field_name = current_values[0]  # Keep field name
+            
+            new_values = [field_name, formatted_value]
+            
+            # Add transformation values
+            for trans_data in transformed_values:
+                new_values.extend([trans_data.get('label', '---'), trans_data.get('value', '---')])
+            
+            # Pad with empty transformation columns if needed
+            max_transforms = (len(current_values) - 3) // 2
+            while len(transformed_values) < max_transforms:
+                new_values.extend(['---', '---'])
+            
+            # Add status column
+            status_text = self._format_status(item_info)
+            new_values.append(status_text)
+            
+            # Update the tree item
+            self.tree.item(item_info['item_id'], values=new_values)
+            
+        except Exception as e:
+            logging.warning(f"Error updating item {position}: {e}")
+    
+    def _format_status(self, item_info):
+        """Format status text showing last received/changed times"""
+        status_parts = []
+        
+        if item_info['last_received_time'] > 0:
+            rx_ago = time_ago(item_info['last_received_time'])
+            status_parts.append(f"rx: {rx_ago}" if rx_ago else "rx: now")
+        
+        if item_info['last_changed_time'] > 0:
+            ch_ago = time_ago(item_info['last_changed_time'])
+            status_parts.append(f"ch: {ch_ago}" if ch_ago else "ch: now")
+        
+        return " | ".join(status_parts) if status_parts else "---"
     
     def on_serial_error(self, error: Exception):
         """Handle serial errors"""
@@ -577,30 +626,87 @@ class MonitorGUI:
     
     def update_stats_timer(self):
         """Update statistics display periodically"""
-        if self.serial_reader:
-            stats = self.serial_reader.get_stats()
-            self.status_bar.update_stats(stats)
+        if not self.running:
+            return
         
-        # Schedule next update
-        self.root.after(1000, self.update_stats_timer)
-    
+        try:
+            if self.serial_reader:
+                stats = self.serial_reader.get_stats()
+                self.status_bar.update_stats(stats)
+        except Exception as e:
+            logging.warning(f"Error updating stats: {e}")
+        
+        # Schedule next update (longer interval)
+        if self.running:
+            self.stats_timer_id = self.root.after(2000, self.update_stats_timer)
+
     def update_relative_times_timer(self):
-        """Update relative time displays every second"""
-        for widget in self.field_widgets.values():
-            widget.update_relative_times()
+        """Update relative time displays every few seconds"""
+        if not self.running:
+            return
         
-        # Schedule next update
-        self.root.after(1000, self.update_relative_times_timer)
-    
+        try:
+            with self.update_lock:
+                for position, item_info in self.tree_items.items():
+                    # Update status column with current time info
+                    current_values = list(self.tree.item(item_info['item_id'], 'values'))
+                    if len(current_values) > 0:
+                        # Update only the status column (last column)
+                        status_text = self._format_status(item_info)
+                        current_values[-1] = status_text
+                        self.tree.item(item_info['item_id'], values=current_values)
+        except Exception as e:
+            logging.warning(f"Error updating relative times: {e}")
+        
+        # Schedule next update (even longer interval)
+        if self.running:
+            self.time_timer_id = self.root.after(5000, self.update_relative_times_timer)
+
     def on_closing(self):
         """Handle window closing"""
+        self.running = False
+        
+        # Cancel all timers
+        for timer_id in [self.stats_timer_id, self.time_timer_id, self.queue_timer_id]:
+            if timer_id:
+                try:
+                    self.root.after_cancel(timer_id)
+                except:
+                    pass
+        
+        # Disconnect serial
         if self.serial_reader:
             self.disconnect()
-        self.root.destroy()
+        
+        # Give time for cleanup
+        self.root.after(100, self.root.destroy)
     
     def run(self):
         """Start the GUI application"""
-        self.root.mainloop()
+        try:
+            # Ensure the GUI is properly initialized
+            self.root.update()
+            
+            # Add a simple test to ensure GUI is responsive
+            logging.info("GUI initialized, starting main loop...")
+            
+            # Test that the GUI can process events
+            def test_responsiveness():
+                logging.debug("GUI responsiveness test - event loop is working")
+                self.root.after(5000, test_responsiveness)  # Test every 5 seconds
+            
+            test_responsiveness()
+            
+            # Start the main event loop
+            self.root.mainloop()
+        except KeyboardInterrupt:
+            logging.info("Application interrupted by user")
+            self.on_closing()
+        except Exception as e:
+            logging.error(f"GUI error: {e}")
+            import traceback
+            traceback.print_exc()
+            self.on_closing()
 
 
 def create_demo_gui():

@@ -86,15 +86,20 @@ class MonitorConfig:
         if not field_config:
             return raw_value
         
+        # Clean and validate the raw value
+        cleaned_value = raw_value.strip()
+        if not cleaned_value or '\x00' in cleaned_value:
+            return '---'  # Return placeholder for invalid/empty data
+        
         try:
             # Type conversion
             field_type = field_config['type']
             if field_type == 'int':
-                value = int(raw_value)
+                value = int(cleaned_value)
             elif field_type == 'float':
-                value = float(raw_value)
+                value = float(cleaned_value)
             else:
-                value = raw_value
+                value = cleaned_value
             
             # Apply format string
             formatted = field_config['format'].format(value)
@@ -107,7 +112,7 @@ class MonitorConfig:
             return formatted
         except (ValueError, TypeError) as e:
             logging.warning(f"Failed to format value '{raw_value}' for position {position}: {e}")
-            return raw_value
+            return '---'  # Return placeholder instead of raw value
     
     def apply_transformation(self, value, transformation: dict) -> float:
         """Apply a single transformation to a numeric value"""
@@ -155,13 +160,23 @@ class MonitorConfig:
         if not transformations:
             return []
         
+        # Clean and validate the raw value
+        cleaned_value = raw_value.strip()
+        if not cleaned_value or '\x00' in cleaned_value:
+            # Return placeholders for all transformations
+            return [{
+                'label': t.get('label', 'Transformed'),
+                'value': '---',
+                'raw_value': 0
+            } for t in transformations]
+        
         try:
             # Convert raw value to numeric
             field_type = field_config['type']
             if field_type == 'int':
-                numeric_value = int(raw_value)
+                numeric_value = int(cleaned_value)
             elif field_type == 'float':
-                numeric_value = float(raw_value)
+                numeric_value = float(cleaned_value)
             else:
                 return []  # Can't transform non-numeric values
             
@@ -186,7 +201,12 @@ class MonitorConfig:
             return results
         except (ValueError, TypeError) as e:
             logging.warning(f"Failed to convert value for transformation: {e}")
-            return []
+            # Return placeholders for all transformations
+            return [{
+                'label': t.get('label', 'Error'),
+                'value': '---',
+                'raw_value': 0
+            } for t in transformations]
     
     def create_example_config(self) -> dict:
         """Create an example configuration dictionary"""
