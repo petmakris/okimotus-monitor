@@ -7,9 +7,9 @@ import time
 from typing import Dict, Any, Optional, List
 from datetime import datetime
 
-from okimotus.monitor.config import MonitorConfig
-from okimotus.monitor.serial_reader import SerialReader, list_serial_ports
-from okimotus.utils import pr_red, pr_yellow, pr_green
+from .config import MonitorConfig
+from .serial_reader import SerialReader, list_serial_ports
+
 
 
 def time_ago(timestamp):
@@ -433,10 +433,10 @@ class MonitorGUI:
             self.serial_reader.start_reading()
             self.connect_button.configure(text="Disconnect")
             self.status_bar.update_connection_status(True, self.port)
-            logging.info(pr_green(f"Connected to {self.port}"))
+            logging.info(f"Connected to {self.port}")
         except Exception as e:
             messagebox.showerror("Connection Error", f"Failed to connect to {self.port}:\n{e}")
-            logging.error(pr_red(f"Connection failed: {e}"))
+            logging.error(f"Connection failed: {e}")
     
     def disconnect(self):
         """Disconnect from serial port"""

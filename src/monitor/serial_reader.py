@@ -9,8 +9,6 @@ from queue import Queue, Empty
 import serial
 from serial.tools.list_ports import comports
 
-from okimotus.utils import pr_red, pr_yellow, pr_green
-
 
 class SerialDataParser:
     """Parser for comma-separated MCU data"""
@@ -82,9 +80,9 @@ class SerialReader:
                 timeout=1,
                 **self.serial_kwargs
             )
-            logging.info(pr_green(f"Connected to {self.port} at {self.baudrate} baud"))
+            logging.info(f"Connected to {self.port} at {self.baudrate} baud")
         except serial.SerialException as e:
-            logging.error(pr_red(f"Failed to connect to {self.port}: {e}"))
+            logging.error(f"Failed to connect to {self.port}: {e}")
             self._notify_error(e)
             raise
     
@@ -97,7 +95,7 @@ class SerialReader:
     def start_reading(self):
         """Start background reading thread"""
         if self._running:
-            logging.warning(pr_yellow("Reader already running"))
+            logging.warning("Reader already running")
             return
         
         if not self.serial_connection or not self.serial_connection.is_open:
@@ -138,7 +136,7 @@ class SerialReader:
                             decoded = data.decode('utf-8', errors='replace')
                             buffer += decoded
                         except UnicodeDecodeError:
-                            logging.warning(pr_yellow("Failed to decode serial data"))
+                            logging.warning("Failed to decode serial data")
                             continue
                 
                 # Process complete lines
@@ -149,11 +147,11 @@ class SerialReader:
                 time.sleep(0.01)  # Small delay to prevent CPU spinning
                 
             except serial.SerialException as e:
-                logging.error(pr_red(f"Serial error: {e}"))
+                logging.error(f"Serial error: {e}")
                 self._notify_error(e)
                 break
             except Exception as e:
-                logging.error(pr_red(f"Unexpected error in read loop: {e}"))
+                logging.error(f"Unexpected error in read loop: {e}")
                 self._notify_error(e)
                 break
     
@@ -168,7 +166,7 @@ class SerialReader:
                 self.lines_parsed += 1
                 self._notify_data(parsed_data)
         except Exception as e:
-            logging.warning(pr_yellow(f"Failed to parse line '{line}': {e}"))
+            logging.warning(f"Failed to parse line '{line}': {e}")
     
     def _notify_data(self, data: Dict[int, str]):
         """Notify all data callbacks"""
@@ -176,7 +174,7 @@ class SerialReader:
             try:
                 callback(data)
             except Exception as e:
-                logging.error(pr_red(f"Error in data callback: {e}"))
+                logging.error(f"Error in data callback: {e}")
     
     def _notify_error(self, error: Exception):
         """Notify all error callbacks"""
@@ -184,7 +182,7 @@ class SerialReader:
             try:
                 callback(error)
             except Exception as e:
-                logging.error(pr_red(f"Error in error callback: {e}"))
+                logging.error(f"Error in error callback: {e}")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get reader statistics"""

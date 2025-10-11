@@ -3,7 +3,7 @@
 import json
 import logging
 from typing import Dict, List, Any, Optional
-from okimotus.utils import pr_red, pr_yellow
+
 
 
 class MonitorConfig:
@@ -27,10 +27,10 @@ class MonitorConfig:
                 config_data = json.load(f)
                 self.load_from_dict(config_data)
         except FileNotFoundError:
-            logging.error(pr_red(f"Configuration file not found: {config_file}"))
+            logging.error(f"Configuration file not found: {config_file}")
             raise
         except json.JSONDecodeError as e:
-            logging.error(pr_red(f"Invalid JSON in configuration file: {e}"))
+            logging.error(f"Invalid JSON in configuration file: {e}")
             raise
     
     def load_from_dict(self, config_data: dict):
@@ -70,7 +70,7 @@ class MonitorConfig:
                         'transformations': field_config.get('transformations', [])
                     }
             except (ValueError, TypeError) as e:
-                logging.warning(pr_yellow(f"Invalid field position '{position_str}': {e}"))
+                logging.warning(f"Invalid field position '{position_str}': {e}")
     
     def get_field_config(self, position: int) -> Optional[Dict[str, Any]]:
         """Get configuration for a specific field position"""
@@ -106,7 +106,7 @@ class MonitorConfig:
             
             return formatted
         except (ValueError, TypeError) as e:
-            logging.warning(pr_yellow(f"Failed to format value '{raw_value}' for position {position}: {e}"))
+            logging.warning(f"Failed to format value '{raw_value}' for position {position}: {e}")
             return raw_value
     
     def apply_transformation(self, value, transformation: dict) -> float:
@@ -118,7 +118,7 @@ class MonitorConfig:
             return value * transform_value
         elif operation == 'divide':
             if transform_value == 0:
-                logging.warning(pr_yellow(f"Division by zero in transformation"))
+                logging.warning(f"Division by zero in transformation")
                 return 0
             return value / transform_value
         elif operation == 'add':
@@ -128,7 +128,7 @@ class MonitorConfig:
         elif operation == 'power':
             return value ** transform_value
         else:
-            logging.warning(pr_yellow(f"Unknown transformation operation: {operation}"))
+            logging.warning(f"Unknown transformation operation: {operation}")
             return value
     
     def format_transformation(self, transformation: dict, transformed_value: float) -> str:
@@ -142,7 +142,7 @@ class MonitorConfig:
                 formatted += f" {unit}"
             return formatted
         except (ValueError, TypeError) as e:
-            logging.warning(pr_yellow(f"Failed to format transformed value: {e}"))
+            logging.warning(f"Failed to format transformed value: {e}")
             return str(transformed_value)
     
     def get_transformed_values(self, position: int, raw_value: str) -> List[Dict[str, str]]:
@@ -176,7 +176,7 @@ class MonitorConfig:
                         'raw_value': transformed_value
                     })
                 except Exception as e:
-                    logging.warning(pr_yellow(f"Failed to apply transformation: {e}"))
+                    logging.warning(f"Failed to apply transformation: {e}")
                     results.append({
                         'label': transformation.get('label', 'Error'),
                         'value': '---',
@@ -185,7 +185,7 @@ class MonitorConfig:
             
             return results
         except (ValueError, TypeError) as e:
-            logging.warning(pr_yellow(f"Failed to convert value for transformation: {e}"))
+            logging.warning(f"Failed to convert value for transformation: {e}")
             return []
     
     def create_example_config(self) -> dict:
@@ -267,7 +267,7 @@ def create_default_config_file(filename: str = "monitor_config.json"):
             json.dump(example_config, f, indent=2)
         logging.info(f"Created example configuration file: {filename}")
     except IOError as e:
-        logging.error(pr_red(f"Failed to create configuration file: {e}"))
+        logging.error(f"Failed to create configuration file: {e}")
         raise
 
 

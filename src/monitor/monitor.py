@@ -5,11 +5,9 @@ import logging
 import sys
 import os
 
-from okimotus.monitor.config import MonitorConfig, create_default_config_file
-from okimotus.monitor.gui import MonitorGUI
-from okimotus.monitor.serial_reader import list_serial_ports
-from okimotus.utils import pr_red, pr_yellow, pr_green
-
+from .config import MonitorConfig, create_default_config_file
+from .gui import MonitorGUI
+from .serial_reader import list_serial_ports
 
 def ask_for_port():
     """Interactive port selection"""
@@ -154,7 +152,7 @@ MCU Data Format:
             print(f"Edit this file to customize your field mappings, then run:")
             print(f"  monitor -c {config_file}")
         except Exception as e:
-            print(pr_red(f"Failed to create configuration file: {e}"))
+            print(f"Failed to create configuration file: {e}")
             sys.exit(1)
         return
     
@@ -162,20 +160,20 @@ MCU Data Format:
     try:
         if args.config:
             if not os.path.exists(args.config):
-                print(pr_red(f"Configuration file not found: {args.config}"))
-                print(pr_yellow("Use --create-config to create an example configuration file."))
+                print(f"Configuration file not found: {args.config}")
+                print("Use --create-config to create an example configuration file.")
                 sys.exit(1)
             
             config = MonitorConfig(config_file=args.config)
-            print(pr_green(f"Loaded configuration from: {args.config}"))
+            print(f"Loaded configuration from: {args.config}")
         else:
             # Use demo configuration
             config = MonitorConfig()
             demo_config = config.create_example_config()
             config.load_from_dict(demo_config)
-            print(pr_green("Using demo configuration with transformations"))
+            print("Using demo configuration with transformations")
     except Exception as e:
-        print(pr_red(f"Failed to load configuration: {e}"))
+        print(f"Failed to load configuration: {e}")
         sys.exit(1)
     
     # Determine serial port
@@ -192,16 +190,16 @@ MCU Data Format:
         ports = list_serial_ports()
         if len(ports) == 1:
             port = ports[0][0]
-            print(pr_green(f"Auto-selected port: {port}"))
+            print(f"Auto-selected port: {port}")
         elif len(ports) > 1:
-            print(pr_yellow("Multiple ports available. Please specify one with -p <port> or use --ask-port"))
+            print("Multiple ports available. Please specify one with -p <port> or use --ask-port")
             print("Available ports:")
             for p, desc, _ in ports:
                 print(f"  {p} - {desc}")
             sys.exit(1)
         else:
-            print(pr_yellow("No serial port specified. Running in demo mode (no data will be received)."))
-            print(pr_yellow("Use -p <port> to connect to a serial device, or --list-ports to see available ports."))
+            print("No serial port specified. Running in demo mode (no data will be received).")
+            print("Use -p <port> to connect to a serial device, or --list-ports to see available ports.")
     
     # Create and run GUI
     try:
@@ -209,7 +207,7 @@ MCU Data Format:
         
         # Auto-connect if port was specified
         if port:
-            print(pr_green(f"Starting monitor on {port} at {args.baudrate} baud"))
+            print(f"Starting monitor on {port} at {args.baudrate} baud")
             gui.root.after(100, gui.connect)  # Connect after GUI is ready
         
         gui.run()
@@ -217,7 +215,7 @@ MCU Data Format:
     except KeyboardInterrupt:
         print("\nShutting down...")
     except Exception as e:
-        logging.error(pr_red(f"Application error: {e}"))
+        logging.error(f"Application error: {e}")
         if args.verbose:
             import traceback
             traceback.print_exc()

@@ -3,26 +3,14 @@ from setuptools import find_packages, setup
 
 
 project_name = 'okimotus-monitor'
-version = '0.0.1.%s' % int(time.time())
+version = '0.1.%s' % int(time.time())
 
 SCRIPTS = [
     'monitor=monitor.monitor:main'
 ]
 
 DEPENDENCIES = [
-    'argcomplete>=1.12',
-    'camel-converter>=3',
-    'colorama>=0.4',
-    'colored-traceback>=0.3.0',
-    'dpath==2.0.1',
-    'Jinja2>=3.1.2',
-    'Pygments>=2.16',
-    'pythondialog>=3.5',
-    'requests>=2.28',
-    'intelhex>=2.3.0',
-    'pyyaml>=6.0.2',
-    'tabulate>=0.9.0',
-    'pyserial==3.5'
+    'pyserial>=3.5'
 ]
 
 

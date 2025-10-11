@@ -81,7 +81,6 @@ Serial.println("23.5,1234");  // That's it!
 ## Installation
 
 ```bash
-# Install Okimotus toolkit
 pip install -e .
 
 # Verify
@@ -931,17 +930,4 @@ value0,value1,value2\n
 ```
 
 ---
-
-## Support
-
-**Documentation:** This file!
-
 **Debug:** `monitor -v`
-
-**Test stream:** `cat /dev/ttyUSB0`
-
-**Repo:** [okimotus](https://github.com/petmakris/okimotus)
-
----
-
-**End of Guide** - Happy Monitoring! 🎉
