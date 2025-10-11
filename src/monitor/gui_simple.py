@@ -286,7 +286,7 @@ class SimpleMonitorGUI:
     def on_serial_data(self, data: Dict[int, str]):
         """Handle new serial data - SIMPLIFIED"""
         try:
-            print(f"Received data: {data}")  # Debug print
+            # print(f"Received data: {data}")  # Debug print
             
             # Schedule update on main thread - SIMPLE approach
             self.root.after_idle(lambda: self.update_table_simple(data))
@@ -329,7 +329,7 @@ class SimpleMonitorGUI:
                     # Update row
                     self.tree.item(item_id, values=[field_name, raw_value, formatted_value, status])
                     
-            print(f"Updated table with {len(data)} values")
+            # print(f"Updated table with {len(data)} values")
                     
         except Exception as e:
             print(f"Error updating table: {e}")
