@@ -9,7 +9,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from monitor.config import MonitorConfig, create_default_config_file
-from monitor.gui_simple import SimpleMonitorGUI as MonitorGUI
+from monitor.gui import SimpleMonitorGUI as MonitorGUI
 from monitor.serial_reader import list_serial_ports
 
 def ask_for_port():
