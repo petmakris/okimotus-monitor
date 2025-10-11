@@ -94,6 +94,10 @@ class SimpleMonitorGUI:
         self.tree_items: Dict[int, str] = {}  # position -> tree item id
         self.field_data: Dict[int, Dict] = {}  # position -> field metadata
         
+        # Transformation controls
+        self.transform_vars: Dict[int, tk.StringVar] = {}  # position -> selected transform
+        self.transform_combos: Dict[int, ttk.Combobox] = {}  # position -> combobox widget
+        
         # Simple flags
         self.running = True
         
@@ -169,29 +173,32 @@ class SimpleMonitorGUI:
         print("UI setup completed")
     
     def create_data_table(self, parent):
-        """Create data table"""
+        """Create data table with transformation dropdowns"""
         table_frame = ttk.Frame(parent)
         table_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         table_frame.columnconfigure(0, weight=1)
         parent.rowconfigure(2, weight=1)
         
-        # Simple columns
-        columns = ['field', 'raw_value', 'formatted_value', 'status']
+        # Enhanced columns with transformation selector
+        columns = ['field', 'raw_value', 'transformed_value', 'transform_select', 'status']
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
         # Configure columns
         self.tree.heading('field', text='Field')
-        self.tree.column('field', width=150, anchor='w')
+        self.tree.column('field', width=120, anchor='w')
         
         self.tree.heading('raw_value', text='Raw Value')
-        self.tree.column('raw_value', width=150, anchor='e')
+        self.tree.column('raw_value', width=120, anchor='e')
         
-        self.tree.heading('formatted_value', text='Formatted Value')
-        self.tree.column('formatted_value', width=150, anchor='e')
+        self.tree.heading('transformed_value', text='Transformed Value')
+        self.tree.column('transformed_value', width=180, anchor='e')
+        
+        self.tree.heading('transform_select', text='Transform')
+        self.tree.column('transform_select', width=150, anchor='w')
         
         self.tree.heading('status', text='Status')
-        self.tree.column('status', width=200, anchor='w')
+        self.tree.column('status', width=180, anchor='w')
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
@@ -204,29 +211,72 @@ class SimpleMonitorGUI:
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
         
+        # Bind events for combobox repositioning
+        self.tree.bind('<Configure>', lambda e: self.root.after_idle(self.position_comboboxes))
+        self.tree.bind('<B1-Motion>', lambda e: self.root.after_idle(self.position_comboboxes))
+        self.tree.bind('<ButtonRelease-1>', lambda e: self.root.after_idle(self.position_comboboxes))
+        
         # Initialize rows for each configured field
         self.initialize_table_rows()
         
         print(f"Table created with {len(self.tree_items)} rows")
     
     def initialize_table_rows(self):
-        """Initialize table rows for configured fields"""
+        """Initialize table rows for configured fields with transformation dropdowns"""
         positions = self.config.get_all_positions()
         
         for position in positions:
             field_config = self.config.get_field_config(position)
             field_name = field_config.get('label', f'Field {position}') if field_config else f'Field {position}'
             
-            # Insert row
-            item_id = self.tree.insert('', 'end', values=[field_name, '---', '---', 'No data'])
+            # Create transformation options
+            transform_options = ["Raw Value"]  # Default option
+            transformations = field_config.get('transformations', []) if field_config else []
+            
+            for transform in transformations:
+                label = transform.get('label', f'Transform {len(transform_options)}')
+                transform_options.append(label)
+            
+            # Add "All Transforms" option if there are transformations
+            if transformations:
+                transform_options.append("All Transforms (Final)")
+            
+            # Create StringVar for this field's transformation selection
+            self.transform_vars[position] = tk.StringVar()
+            
+            # Set default to "All Transforms" if available, otherwise "Raw Value"
+            default_selection = "All Transforms (Final)" if transformations else "Raw Value"
+            self.transform_vars[position].set(default_selection)
+            
+            # Insert row with placeholder for transform dropdown
+            item_id = self.tree.insert('', 'end', values=[
+                field_name, 
+                '---', 
+                '---', 
+                '', # Placeholder for dropdown
+                'No data'
+            ])
             
             # Store mapping
             self.tree_items[position] = item_id
             self.field_data[position] = {
                 'last_received_time': 0,
                 'last_changed_time': 0,
-                'last_value': None
+                'last_value': None,
+                'transform_options': transform_options,
+                'transformations': transformations
             }
+            
+            # Create combobox for transformation selection (we'll position it later)
+            combo = ttk.Combobox(
+                self.tree, 
+                textvariable=self.transform_vars[position],
+                values=transform_options,
+                state='readonly',
+                width=18
+            )
+            combo.bind('<<ComboboxSelected>>', lambda e, pos=position: self.on_transform_changed(pos))
+            self.transform_combos[position] = combo
     
     def setup_serial(self):
         """Setup serial connection"""
@@ -294,45 +344,115 @@ class SimpleMonitorGUI:
         except Exception as e:
             print(f"Error in on_serial_data: {e}")
     
-    def update_table_simple(self, data: Dict[int, str]):
-        """Update table with new data - SIMPLIFIED"""
+    def on_transform_changed(self, position: int):
+        """Handle transformation selection change"""
+        try:
+            # Force a redraw with current data
+            if position in self.field_data and self.field_data[position]['last_value'] is not None:
+                # Get the last raw value if we have it
+                item_id = self.tree_items[position]
+                current_values = list(self.tree.item(item_id, 'values'))
+                if len(current_values) >= 2 and current_values[1] != '---':
+                    raw_value = current_values[1]
+                    self.update_single_field(position, raw_value)
+        except Exception as e:
+            print(f"Error handling transform change for position {position}: {e}")
+
+    def get_transformed_value(self, position: int, raw_value: str) -> str:
+        """Get the transformed value based on current selection"""
+        try:
+            selected_transform = self.transform_vars[position].get()
+            field_info = self.field_data[position]
+            transformations = field_info.get('transformations', [])
+            
+            if selected_transform == "Raw Value":
+                return self.config.format_value(position, raw_value)
+            elif selected_transform == "All Transforms (Final)":
+                return self.config.apply_all_transformations(position, raw_value)
+            else:
+                # Find the specific transformation
+                transformation_steps = self.config.get_transformation_steps(position, raw_value)
+                for step in transformation_steps:
+                    if step['label'] == selected_transform:
+                        return step['formatted']
+                
+                # Fallback to raw value
+                return self.config.format_value(position, raw_value)
+                
+        except Exception as e:
+            print(f"Error getting transformed value for position {position}: {e}")
+            return self.config.format_value(position, raw_value)
+
+    def update_single_field(self, position: int, raw_value: str):
+        """Update a single field with new data"""
         try:
             current_time = time.time()
+            item_id = self.tree_items[position]
+            field_info = self.field_data[position]
             
+            # Get transformed value based on current selection
+            transformed_value = self.get_transformed_value(position, raw_value)
+            
+            # Update timing
+            field_info['last_received_time'] = current_time
+            if field_info['last_value'] != transformed_value:
+                field_info['last_changed_time'] = current_time
+                field_info['last_value'] = transformed_value
+            
+            # Create status
+            status = f"rx: {time_ago(field_info['last_received_time'])}"
+            if field_info['last_changed_time'] > 0:
+                status += f" | ch: {time_ago(field_info['last_changed_time'])}"
+            
+            # Get current field name and update row
+            current_values = list(self.tree.item(item_id, 'values'))
+            field_name = current_values[0]  # Keep field name
+            
+            # Position combobox in the transform column
+            combo = self.transform_combos[position]
+            bbox = self.tree.bbox(item_id, 'transform_select')
+            if bbox:
+                combo.place(x=bbox[0] + self.tree.winfo_x(), 
+                           y=bbox[1] + self.tree.winfo_y(), 
+                           width=bbox[2], height=bbox[3])
+            
+            # Update row (leave transform column empty since we have the combobox)
+            self.tree.item(item_id, values=[field_name, raw_value, transformed_value, '', status])
+            
+        except Exception as e:
+            print(f"Error updating single field {position}: {e}")
+
+    def update_table_simple(self, data: Dict[int, str]):
+        """Update table with new data using transformations"""
+        try:
             for position, raw_value in data.items():
                 if position in self.tree_items:
-                    item_id = self.tree_items[position]
-                    field_info = self.field_data[position]
+                    self.update_single_field(position, raw_value)
                     
-                    # Format value
-                    try:
-                        formatted_value = self.config.format_value(position, raw_value)
-                    except Exception as e:
-                        formatted_value = raw_value  # Fallback
-                        print(f"Format error for position {position}: {e}")
-                    
-                    # Update timing
-                    field_info['last_received_time'] = current_time
-                    if field_info['last_value'] != formatted_value:
-                        field_info['last_changed_time'] = current_time
-                        field_info['last_value'] = formatted_value
-                    
-                    # Create status
-                    status = f"rx: {time_ago(field_info['last_received_time'])}"
-                    if field_info['last_changed_time'] > 0:
-                        status += f" | ch: {time_ago(field_info['last_changed_time'])}"
-                    
-                    # Get current values and update
-                    current_values = list(self.tree.item(item_id, 'values'))
-                    field_name = current_values[0]  # Keep field name
-                    
-                    # Update row
-                    self.tree.item(item_id, values=[field_name, raw_value, formatted_value, status])
-                    
-            # print(f"Updated table with {len(data)} values")
+            # Position all comboboxes after table update
+            self.root.after_idle(self.position_comboboxes)
                     
         except Exception as e:
             print(f"Error updating table: {e}")
+
+    def position_comboboxes(self):
+        """Position all comboboxes in their correct table cells"""
+        try:
+            for position, combo in self.transform_combos.items():
+                if position in self.tree_items:
+                    item_id = self.tree_items[position]
+                    bbox = self.tree.bbox(item_id, 'transform_select')
+                    if bbox:
+                        # Adjust position relative to the tree widget
+                        tree_x = self.tree.winfo_x()
+                        tree_y = self.tree.winfo_y()
+                        combo.place(x=tree_x + bbox[0] + 2, 
+                                   y=tree_y + bbox[1] + 2, 
+                                   width=bbox[2] - 4, 
+                                   height=bbox[3] - 4)
+                        combo.lift()  # Bring to front
+        except Exception as e:
+            print(f"Error positioning comboboxes: {e}")
     
     def on_serial_error(self, error: Exception):
         """Handle serial errors"""
@@ -383,11 +503,13 @@ class SimpleMonitorGUI:
             for position, item_id in self.tree_items.items():
                 current_values = list(self.tree.item(item_id, 'values'))
                 field_name = current_values[0]
-                self.tree.item(item_id, values=[field_name, '---', '---', 'Cleared'])
+                self.tree.item(item_id, values=[field_name, '---', '---', '', 'Cleared'])
                 self.field_data[position] = {
                     'last_received_time': 0,
                     'last_changed_time': 0,
-                    'last_value': None
+                    'last_value': None,
+                    'transform_options': self.field_data[position].get('transform_options', []),
+                    'transformations': self.field_data[position].get('transformations', [])
                 }
             print("Values cleared")
         except Exception as e:
@@ -428,10 +550,15 @@ class SimpleMonitorGUI:
     
     def on_closing(self):
         """Handle window closing"""
-        print("Closing application...")
+        print("Shutting down...")
         self.running = False
         
         try:
+            # Clean up comboboxes
+            for combo in self.transform_combos.values():
+                combo.destroy()
+            
+            # Disconnect serial
             if self.serial_reader:
                 self.disconnect()
         except:

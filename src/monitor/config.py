@@ -81,7 +81,7 @@ class MonitorConfig:
         return sorted(self.fields.keys())
     
     def format_value(self, position: int, raw_value: str) -> str:
-        """Format a raw value according to field configuration"""
+        """Format a raw value according to field configuration (base format only)"""
         field_config = self.get_field_config(position)
         if not field_config:
             return raw_value
@@ -113,6 +113,95 @@ class MonitorConfig:
         except (ValueError, TypeError) as e:
             logging.warning(f"Failed to format value '{raw_value}' for position {position}: {e}")
             return '---'  # Return placeholder instead of raw value
+
+    def apply_all_transformations(self, position: int, raw_value: str) -> str:
+        """Apply all transformations in series and return the final formatted result"""
+        field_config = self.get_field_config(position)
+        if not field_config:
+            return raw_value
+        
+        transformations = field_config.get('transformations', [])
+        if not transformations:
+            return self.format_value(position, raw_value)
+        
+        # Clean and validate the raw value
+        cleaned_value = raw_value.strip()
+        if not cleaned_value or '\x00' in cleaned_value:
+            return '---'
+        
+        try:
+            # Convert to numeric value
+            field_type = field_config['type']
+            if field_type == 'int':
+                current_value = int(cleaned_value)
+            elif field_type == 'float':
+                current_value = float(cleaned_value)
+            else:
+                return self.format_value(position, raw_value)  # Can't transform non-numeric
+            
+            # Apply all transformations in series
+            for transformation in transformations:
+                current_value = self.apply_transformation(current_value, transformation)
+            
+            # Use the last transformation for formatting, or fall back to base format
+            final_transformation = transformations[-1]
+            return self.format_transformation(final_transformation, current_value)
+            
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Failed to apply transformations for position {position}: {e}")
+            return '---'
+
+    def get_transformation_steps(self, position: int, raw_value: str) -> List[Dict[str, Any]]:
+        """Get all transformation steps with intermediate values"""
+        field_config = self.get_field_config(position)
+        if not field_config:
+            return []
+        
+        transformations = field_config.get('transformations', [])
+        if not transformations:
+            return []
+        
+        # Clean and validate the raw value
+        cleaned_value = raw_value.strip()
+        if not cleaned_value or '\x00' in cleaned_value:
+            return []
+        
+        try:
+            # Convert to numeric value
+            field_type = field_config['type']
+            if field_type == 'int':
+                current_value = int(cleaned_value)
+            elif field_type == 'float':
+                current_value = float(cleaned_value)
+            else:
+                return []  # Can't transform non-numeric
+            
+            steps = []
+            
+            # Add the original value as step 0
+            steps.append({
+                'label': f"Raw {field_config.get('label', 'Value')}",
+                'value': current_value,
+                'formatted': self.format_value(position, raw_value)
+            })
+            
+            # Apply transformations step by step
+            for i, transformation in enumerate(transformations):
+                current_value = self.apply_transformation(current_value, transformation)
+                formatted = self.format_transformation(transformation, current_value)
+                
+                steps.append({
+                    'label': transformation.get('label', f'Transform {i+1}'),
+                    'value': current_value,
+                    'formatted': formatted,
+                    'transformation': transformation
+                })
+            
+            return steps
+            
+        except (ValueError, TypeError) as e:
+            logging.warning(f"Failed to get transformation steps for position {position}: {e}")
+            return []
     
     def apply_transformation(self, value, transformation: dict) -> float:
         """Apply a single transformation to a numeric value"""
