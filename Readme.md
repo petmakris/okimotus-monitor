@@ -237,24 +237,6 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 | `color` | string | "black" | red, blue, green, etc. |
 | `transformations` | array | [] | Calculations |
 
-### Window Sizing
-
-**Default:** 1200×480 (optimized for electronics bench viewing)
-
-**Recommended sizes based on content:**
-
-| Fields | Transforms | Size (W × H) | Use Case |
-|--------|-----------|--------------|----------|
-| 1-3 | 0 | 1000 × 400 | Simple monitoring |
-| 1-5 | 1 | 1200 × 480 | Standard bench setup |
-| 1-5 | 2+ | 1400 × 500 | Multiple transformations |
-| 3-6 | 2-3 | 1600 × 600 | Complex multi-sensor |
-
-**Large Font Considerations:**
-- Fonts optimized for 1-1.5 meter viewing distance
-- Wider columns accommodate larger text
-- Taller rows (25px) for better readability
-
 ---
 
 ## Data Format & MCU Code
