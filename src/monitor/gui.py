@@ -97,6 +97,8 @@ class SimpleMonitorGUI:
         # Transformation controls
         self.transform_vars: Dict[int, tk.StringVar] = {}  # position -> selected transform
         self.transform_combos: Dict[int, ttk.Combobox] = {}  # position -> combobox widget
+        self.combobox_positioned: bool = False  # Track if comboboxes have been positioned
+        self.pending_reposition: Optional[str] = None  # Track pending repositioning
         
         # Simple flags
         self.running = True
@@ -211,10 +213,11 @@ class SimpleMonitorGUI:
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
         
-        # Bind events for combobox repositioning
-        self.tree.bind('<Configure>', lambda e: self.root.after_idle(self.position_comboboxes))
-        self.tree.bind('<B1-Motion>', lambda e: self.root.after_idle(self.position_comboboxes))
-        self.tree.bind('<ButtonRelease-1>', lambda e: self.root.after_idle(self.position_comboboxes))
+        # Bind only essential events for combobox repositioning
+        self.tree.bind('<Configure>', self.on_tree_configure)
+        self.tree.bind('<MouseWheel>', self.on_scroll)
+        self.tree.bind('<Button-4>', self.on_scroll)  # Linux scroll up
+        self.tree.bind('<Button-5>', self.on_scroll)  # Linux scroll down
         
         # Initialize rows for each configured field
         self.initialize_table_rows()
@@ -344,6 +347,26 @@ class SimpleMonitorGUI:
         except Exception as e:
             print(f"Error in on_serial_data: {e}")
     
+    def on_scroll(self, event):
+        """Handle scroll events - reposition comboboxes after scroll"""
+        # Cancel any pending repositioning
+        if self.pending_reposition:
+            self.root.after_cancel(self.pending_reposition)
+        
+        # Schedule repositioning with a small delay
+        self.pending_reposition = self.root.after(50, self.position_comboboxes_stable)
+
+    def on_tree_configure(self, event):
+        """Handle tree configure events with debouncing"""
+        # Only reposition if the size actually changed or it's the first time
+        if not self.combobox_positioned or (hasattr(event, 'width') and hasattr(event, 'height')):
+            # Cancel any pending repositioning
+            if self.pending_reposition:
+                self.root.after_cancel(self.pending_reposition)
+            
+            # Schedule repositioning with a small delay to debounce
+            self.pending_reposition = self.root.after(100, self.position_comboboxes_stable)
+
     def on_transform_changed(self, position: int):
         """Handle transformation selection change"""
         try:
@@ -408,14 +431,6 @@ class SimpleMonitorGUI:
             current_values = list(self.tree.item(item_id, 'values'))
             field_name = current_values[0]  # Keep field name
             
-            # Position combobox in the transform column
-            combo = self.transform_combos[position]
-            bbox = self.tree.bbox(item_id, 'transform_select')
-            if bbox:
-                combo.place(x=bbox[0] + self.tree.winfo_x(), 
-                           y=bbox[1] + self.tree.winfo_y(), 
-                           width=bbox[2], height=bbox[3])
-            
             # Update row (leave transform column empty since we have the combobox)
             self.tree.item(item_id, values=[field_name, raw_value, transformed_value, '', status])
             
@@ -429,15 +444,19 @@ class SimpleMonitorGUI:
                 if position in self.tree_items:
                     self.update_single_field(position, raw_value)
                     
-            # Position all comboboxes after table update
-            self.root.after_idle(self.position_comboboxes)
+            # Only position comboboxes if they haven't been positioned yet
+            if not self.combobox_positioned:
+                self.root.after_idle(self.position_comboboxes_stable)
                     
         except Exception as e:
             print(f"Error updating table: {e}")
 
-    def position_comboboxes(self):
-        """Position all comboboxes in their correct table cells"""
+    def position_comboboxes_stable(self):
+        """Position all comboboxes with stability tracking"""
         try:
+            # Clear pending reposition
+            self.pending_reposition = None
+            
             for position, combo in self.transform_combos.items():
                 if position in self.tree_items:
                     item_id = self.tree_items[position]
@@ -451,8 +470,16 @@ class SimpleMonitorGUI:
                                    width=bbox[2] - 4, 
                                    height=bbox[3] - 4)
                         combo.lift()  # Bring to front
+            
+            # Mark as positioned
+            self.combobox_positioned = True
+            
         except Exception as e:
             print(f"Error positioning comboboxes: {e}")
+
+    def position_comboboxes(self):
+        """Legacy method - kept for compatibility"""
+        self.position_comboboxes_stable()
     
     def on_serial_error(self, error: Exception):
         """Handle serial errors"""
