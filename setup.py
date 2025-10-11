@@ -21,6 +21,11 @@ TEST_DEPENDENCIES = [
     'coverage'
 ]
 
+BUILD_DEPENDENCIES = [
+    'pyinstaller>=5.0',
+    'cx_Freeze>=6.0',
+]
+
 
 setup_config = {
     'name': project_name,
@@ -32,6 +37,10 @@ setup_config = {
     'packages': find_packages(where="src", exclude=["*.tests", "*.tests.*", "tests.*", "tests"]),
     'install_requires': DEPENDENCIES,
     'tests_require': TEST_DEPENDENCIES,
+    'extras_require': {
+        'build': BUILD_DEPENDENCIES,
+        'dev': TEST_DEPENDENCIES + BUILD_DEPENDENCIES,
+    },
     'include_package_data': True,
     'entry_points': { 'console_scripts': SCRIPTS },
 }

@@ -100,6 +100,22 @@ Serial.println("23.5,1234");  // That's it!
 
 ## Installation
 
+### Option 1: Standalone Executable (Recommended for end users)
+
+Download the pre-built executable for your platform from the releases page, or build it yourself:
+
+```bash
+# Install build dependencies
+pip install pyinstaller
+
+# Build executable
+python build_executable.py
+```
+
+The standalone executable will be created in the `dist/` directory and contains everything needed to run the application.
+
+### Option 2: Python Package (For developers)
+
 ```bash
 pip install -e .
 
@@ -107,7 +123,9 @@ pip install -e .
 monitor --help
 ```
 
-**Dependencies:** Python 3.7+, tkinter, pyserial, pyyaml, tabulate, pygments
+**Dependencies:** Python 3.7+, tkinter, pyserial
+
+For building executables, see [BUILD.md](BUILD.md) for detailed instructions.
 
 ---
 
