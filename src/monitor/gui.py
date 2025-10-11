@@ -37,7 +37,7 @@ def time_ago(timestamp):
 class StatusBar:
     """Status bar for connection and statistics info"""
     
-    def __init__(self, parent):
+    def __init__(self, parent, font_style='Status.TLabel'):
         self.frame = ttk.Frame(parent)
         
         # Connection status
@@ -46,20 +46,21 @@ class StatusBar:
         self.connection_label = ttk.Label(
             self.frame,
             textvariable=self.connection_var,
-            foreground='red'
+            foreground='red',
+            style=font_style
         )
         self.connection_label.pack(side=tk.LEFT, padx=(0, 20))
         
         # Statistics
         self.stats_var = tk.StringVar()
         self.stats_var.set("Lines: 0 | Parsed: 0")
-        self.stats_label = ttk.Label(self.frame, textvariable=self.stats_var)
+        self.stats_label = ttk.Label(self.frame, textvariable=self.stats_var, style=font_style)
         self.stats_label.pack(side=tk.LEFT, padx=(0, 20))
         
         # Last data time
         self.last_data_var = tk.StringVar()
         self.last_data_var.set("Last data: Never")
-        self.last_data_label = ttk.Label(self.frame, textvariable=self.last_data_var)
+        self.last_data_label = ttk.Label(self.frame, textvariable=self.last_data_var, style=font_style)
         self.last_data_label.pack(side=tk.LEFT)
     
     def update_connection_status(self, connected: bool, port: str = ""):
@@ -122,7 +123,26 @@ class SimpleMonitorGUI:
         print("GUI initialized successfully")
     
     def setup_ui(self):
-        """Setup the user interface"""
+        """Setup the user interface with larger fonts for bench viewing"""
+        # Configure larger fonts for better visibility from distance
+        self.large_font = ('Arial', 14, 'normal')
+        self.button_font = ('Arial', 12, 'normal')
+        self.table_font = ('Arial', 12, 'normal')
+        self.status_font = ('Arial', 11, 'normal')
+        
+        # Configure ttk styles for larger fonts
+        style = ttk.Style()
+        style.configure('Large.TButton', font=self.button_font)
+        style.configure('Large.TLabel', font=self.large_font)
+        style.configure('Status.TLabel', font=self.status_font)
+        
+        # Configure Treeview fonts
+        style.configure('Treeview', font=self.table_font, rowheight=25)
+        style.configure('Treeview.Heading', font=('Arial', 13, 'bold'))
+        
+        # Configure Combobox fonts
+        style.configure('Large.TCombobox', font=self.table_font)
+        
         # Main container
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -136,7 +156,7 @@ class SimpleMonitorGUI:
         title_label = ttk.Label(
             main_frame,
             text=self.config.title,
-            font=('Arial', 16, 'bold')
+            font=('Arial', 24, 'bold')
         )
         title_label.grid(row=0, column=0, pady=(0, 20))
         
@@ -147,29 +167,32 @@ class SimpleMonitorGUI:
         self.connect_button = ttk.Button(
             control_frame,
             text="Connect" if not self.port else "Disconnect",
-            command=self.toggle_connection
+            command=self.toggle_connection,
+            style='Large.TButton'
         )
         self.connect_button.pack(side=tk.LEFT, padx=(0, 10))
         
         clear_button = ttk.Button(
             control_frame,
             text="Clear Values",
-            command=self.clear_values
+            command=self.clear_values,
+            style='Large.TButton'
         )
         clear_button.pack(side=tk.LEFT, padx=(0, 10))
         
         port_button = ttk.Button(
             control_frame,
             text="Select Port",
-            command=self.select_port
+            command=self.select_port,
+            style='Large.TButton'
         )
         port_button.pack(side=tk.LEFT)
         
         # Data table
         self.create_data_table(main_frame)
         
-        # Status bar
-        self.status_bar = StatusBar(main_frame)
+        # Status bar with larger fonts
+        self.status_bar = StatusBar(main_frame, 'Status.TLabel')
         self.status_bar.frame.grid(row=3, column=0, sticky=(tk.W, tk.E), pady=(10, 0))
         
         print("UI setup completed")
@@ -186,21 +209,21 @@ class SimpleMonitorGUI:
         
         self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
         
-        # Configure columns
+        # Configure columns with larger widths for bigger fonts
         self.tree.heading('field', text='Field')
-        self.tree.column('field', width=120, anchor='w')
+        self.tree.column('field', width=150, anchor='w')
         
         self.tree.heading('raw_value', text='Raw Value')
-        self.tree.column('raw_value', width=120, anchor='e')
+        self.tree.column('raw_value', width=150, anchor='e')
         
         self.tree.heading('transformed_value', text='Transformed Value')
-        self.tree.column('transformed_value', width=180, anchor='e')
+        self.tree.column('transformed_value', width=220, anchor='e')
         
         self.tree.heading('transform_select', text='Transform')
-        self.tree.column('transform_select', width=150, anchor='w')
+        self.tree.column('transform_select', width=180, anchor='w')
         
         self.tree.heading('status', text='Status')
-        self.tree.column('status', width=180, anchor='w')
+        self.tree.column('status', width=220, anchor='w')
         
         # Scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
@@ -276,7 +299,8 @@ class SimpleMonitorGUI:
                 textvariable=self.transform_vars[position],
                 values=transform_options,
                 state='readonly',
-                width=18
+                width=18,
+                style='Large.TCombobox'
             )
             combo.bind('<<ComboboxSelected>>', lambda e, pos=position: self.on_transform_changed(pos))
             self.transform_combos[position] = combo
@@ -518,7 +542,7 @@ class SimpleMonitorGUI:
                     self.setup_serial()
                     port_window.destroy()
             
-            ttk.Button(port_window, text="Select", command=select).pack(pady=10)
+            ttk.Button(port_window, text="Select", command=select, style='Large.TButton').pack(pady=10)
             
         except Exception as e:
             print(f"Error in port selection: {e}")

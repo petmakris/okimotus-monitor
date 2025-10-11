@@ -2,8 +2,8 @@
   "title": "Phase Tracker",
   "refresh_rate": 100,
   "window": {
-    "width": 900,
-    "height": 360
+    "width": 1200,
+    "height": 480
   },
   "fields": {
     "0": {
