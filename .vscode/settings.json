@@ -1,0 +1,16 @@
+{
+    "window.title": "Okimotus Devtools",
+    "workbench.colorCustomizations": {
+        "titleBar.activeBackground": "#21046b",
+        "titleBar.inactiveBackground": "#21046b",
+        "titleBar.activeForeground": "#ffffff",
+        "activityBar.activeBackground": "#21046b",
+        "titleBar.inactiveForeground": "#ffffff",
+        "activityBar.background": "#21046b",
+        "activityBar.foreground": "#ffffff"
+    },
+    "files.associations": {
+        "lcd.h": "c",
+        "stdint.h": "c"
+    }
+}

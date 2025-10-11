@@ -1,0 +1,1 @@
+# Monitor module for real-time MCU data visualization
