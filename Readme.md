@@ -2,13 +2,7 @@
 
 **Real-time GUI for Microcontroller Data Visualization with Enhanced UI**
 
-> 💡 **Quick Start:** `monitor --create-config` → edit config → `monitor -c config.json -p /dev/ttyUSB0`
-
-![Main Interface](ui-1.png)
-*Enhanced UI with transformation dropdowns and larger fonts for electronics bench viewing*
-
-![Port Selection](ui-2.png)
-*Clean port selection dialog showing only meaningful devices*
+![Main Interface](doc/ui.png)
 
 ---
 
@@ -32,35 +26,6 @@
 
 **Monitor** displays real-time comma-separated data from microcontrollers via serial communication, with automatic value transformations and a professional table-based visualization optimized for electronics bench use.
 
-### Features
-
-- ✅ **Enhanced Table Interface** - Professional aligned data display with sortable columns
-- ✅ **Interactive Transformations** - Dropdown menus to select and view intermediate calculation steps
-- ✅ **Large Fonts** - Optimized for viewing from 1-1.5 meters at electronics bench
-- ✅ **Smart Port Selection** - Filtered list showing only meaningful serial devices
-- ✅ **Mathematical Transformations** - Apply operations in series (divide, multiply, add, subtract, power)
-- ✅ **Real-time Updates** - Live data with change tracking and timestamps
-- ✅ **Visual Feedback** - Status indicators for data reception and value changes
-- ✅ **JSON Configuration** - Flexible setup with comprehensive formatting options
-
-### New UI Enhancements
-
-- **Table-based Layout**: Clean, aligned columns replacing scattered field widgets
-- **Transformation Dropdowns**: Interactive selection between raw values, intermediate steps, and final results
-- **Electronics Bench Optimized**: Larger fonts and wider interface for distance viewing
-- **Stable Interface**: Rock-solid dropdowns that don't flicker during data updates
-- **Clean Port Selection**: Filtered device list excluding generic/meaningless ports
-
-### Use Cases
-
-- Encoder monitoring (counts → rotations → degrees)
-- Sensor readings (ADC → voltage, temperature conversions)
-- Motor control (PWM → percentage, speed monitoring)
-- Multi-sensor dashboards
-- Electronics bench testing and debugging
-- Sensor readings (ADC → voltage, temperature conversions)
-- Motor control (PWM → percentage, speed monitoring)
-- Multi-sensor dashboards
 
 ---
 
@@ -69,13 +34,13 @@
 ### 3-Step Setup
 
 ```bash
-# 1. Create template
-monitor --create-config
+# 1. Generate config template (redirect to file)
+monitor --create-config > my_config.json
 
-# 2. Edit monitor_config.json
+# 2. Edit my_config.json to configure ports and fields
 
 # 3. Run
-monitor -c monitor_config.json -p /dev/ttyUSB0
+monitor -c my_config.json
 ```
 
 ### Minimal Configuration
@@ -83,9 +48,12 @@ monitor -c monitor_config.json -p /dev/ttyUSB0
 ```json
 {
   "title": "My Monitor",
-  "fields": {
-    "0": "Temperature",
-    "1": "Encoder"
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Temperature", "type": "float", "format": "{:.1f}", "unit": "°C"},
+      "1": {"label": "Encoder", "type": "int", "format": "{:,}", "unit": "counts"}
+    }
   }
 }
 ```
@@ -108,7 +76,11 @@ Download the pre-built executable for your platform from the releases page, or b
 # Install build dependencies
 pip install pyinstaller
 
-# Build executable
+# Option A: Build from project root (recommended)
+python build_release.py
+
+# Option B: Build from releases folder
+cd releases
 python build_executable.py
 ```
 
@@ -125,7 +97,7 @@ monitor --help
 
 **Dependencies:** Python 3.7+, tkinter, pyserial
 
-For building executables, see [BUILD.md](BUILD.md) for detailed instructions.
+**Building Releases:** All release/build related files are in the `releases/` folder. See [releases/BUILD.md](releases/BUILD.md) for detailed build instructions.
 
 ---
 
@@ -135,51 +107,50 @@ For building executables, see [BUILD.md](BUILD.md) for detailed instructions.
 
 | Command | Description |
 |---------|-------------|
-| `monitor --create-config` | Generate template |
-| `monitor --list-ports` | Show serial ports |
-| `monitor -c FILE -p PORT` | Run with config |
-| `monitor -c FILE -p PORT -b 9600` | Custom baudrate |
-| `monitor -v` | Verbose mode |
+| `monitor --create-config` | Print example config to stdout |
+| `monitor --list` | List available serial ports |
+| `monitor -c FILE` | Run with config file (required) |
+| `monitor -v` | Enable verbose logging |
 
 ### All Options
 
-**Connection:**
-- `-p PORT` - Serial port (/dev/ttyUSB0, COM3)
-- `-b RATE` - Baudrate (default: 115200)
-- `--ask-port` - Interactive port selection
-
 **Configuration:**
-- `-c FILE` - Config file (JSON)
-- `--create-config` - Generate example
+- `-c FILE` - Config file (JSON) - **REQUIRED**
+- `--create-config` - Print example configuration to stdout
 
 **Information:**
-- `--list-ports` - List ports
-- `-v` - Verbose logging
-- `-h` - Help
+- `--list` - List available serial ports
+- `-v, --verbose` - Enable verbose logging
+- `-h, --help` - Show help message
 
 ### Examples
 
 ```bash
-monitor --create-config                    # Create template
-monitor --list-ports                       # See ports
-monitor -c config.json -p /dev/ttyUSB0     # Basic run
-monitor -c config.json -p COM3 -b 9600     # Windows
-monitor -c config.json --ask-port          # Interactive
-monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
+# List available ports
+monitor --list
+
+# Generate config template
+monitor --create-config > config.json
+
+# Run with config
+monitor -c config.json
+
+# Verbose mode for debugging
+monitor -c config.json -v
 ```
 
 ### GUI Controls
 
 | Control | Function |
 |---------|----------|
-| **Connect/Disconnect** | Toggle serial connection |
+| **Connect/Disconnect** | Toggle serial connection for all ports |
 | **Clear Values** | Reset all fields to `---` |
-| **Select Port** | Open filtered port selection dialog |
 | **Transform Dropdowns** | Select transformation view per field |
 | **Table Scrolling** | Navigate fields with mouse wheel |
 | **Status Bar** | Connection status, statistics & timing |
 
 **Table Columns:**
+- **Port**: Serial port identifier
 - **Field**: Field name/label
 - **Raw Value**: Original data from MCU
 - **Transformed Value**: Result after selected transformation
@@ -207,11 +178,17 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 ```json
 {
   "title": "Monitor Title",
-  "refresh_rate": 100,
   "window": {"width": 1400, "height": 500},
-  "fields": {
-    "0": { /* field config */ },
-    "1": { /* field config */ }
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": { /* field config */ },
+      "1": { /* field config */ }
+    },
+    "/dev/ttyUSB1": {
+      "baudrate": 9600,
+      "0": { /* field config */ }
+    }
   }
 }
 ```
@@ -221,26 +198,67 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 | Property | Default | Description |
 |----------|---------|-------------|
 | `title` | "MCU Monitor" | Window title |
-| `refresh_rate` | 100 | Update interval (ms) |
 | `window.width` | 800 | Window width (px) |
 | `window.height` | 600 | Window height (px) |
 
+### Port Configuration
+
+Each port in the `ports` object must specify:
+- **baudrate**: Serial communication speed (e.g., 115200, 9600)
+- **Field mappings**: Numbered fields (0, 1, 2, ...) for comma-separated values
+
+**Example with multiple ports:**
+```json
+{
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Encoder 1", "type": "int", "format": "{:,}", "unit": "counts"},
+      "1": {"label": "Encoder 2", "type": "int", "format": "{:,}", "unit": "counts"}
+    },
+    "/dev/ttyUSB1": {
+      "baudrate": 9600,
+      "0": {"label": "Temperature", "type": "float", "format": "{:.1f}", "unit": "°C"}
+    },
+    "COM3": {
+      "baudrate": 115200,
+      "0": {"label": "Sensor", "type": "float", "format": "{:.3f}", "unit": "V"}
+    }
+  }
+}
+```
+
+**Important Notes:**
+- All configured ports are opened simultaneously
+- Each port can have different baudrate
+- Port names are platform-specific:
+  - Linux: `/dev/ttyUSB0`, `/dev/ttyACM0`
+  - Windows: `COM3`, `COM4`
+  - macOS: `/dev/cu.usbserial-*`
+- Use `monitor --list` to see available ports
+
 ### Field Configuration
 
-**Simple (string only):**
+**Simple (label only):**
 ```json
-"0": "Temperature"
+"/dev/ttyUSB0": {
+  "baudrate": 115200,
+  "0": {"label": "Temperature", "type": "float", "format": "{:.1f}", "unit": "°C"}
+}
 ```
 
 **Full configuration:**
 ```json
-"0": {
-  "label": "Encoder 1",
-  "type": "int",
-  "format": "{:,}",
-  "unit": "counts",
-  "color": "green",
-  "transformations": [ /* see below */ ]
+"/dev/ttyUSB0": {
+  "baudrate": 115200,
+  "0": {
+    "label": "Encoder 1",
+    "type": "int",
+    "format": "{:,}",
+    "unit": "counts",
+    "color": "green",
+    "transformations": [ /* see below */ ]
+  }
 }
 ```
 
@@ -252,8 +270,15 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 | `type` | string | "string" | int, float, string |
 | `format` | string | "{}" | Format string |
 | `unit` | string | "" | Unit label |
-| `color` | string | "black" | red, blue, green, etc. |
+| `color` | string | "black" | Field name color (see below) |
 | `transformations` | array | [] | Calculations |
+
+**Supported Colors:**
+- `red`, `green`, `blue`, `black` (default)
+- `orange`, `purple`, `brown`
+- `pink`, `cyan`, `magenta`, `yellow`, `gray`
+
+Colors are applied to the field name in the table for visual differentiation.
 
 ---
 
@@ -268,19 +293,23 @@ value0,value1,value2,...\n
 
 ### Position Mapping
 
+Data sent from each port is mapped by position:
 ```
-"1234,5678,98.6\n"
+"1234,5678,98.6\n"  (from /dev/ttyUSB0)
   ↓    ↓    ↓
   0    1    2
 ```
 
-Configuration maps by position:
+Configuration maps by position within each port:
 ```json
 {
-  "fields": {
-    "0": "Encoder 1",
-    "1": "Encoder 2", 
-    "2": "Temperature"
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Encoder 1", "type": "int"},
+      "1": {"label": "Encoder 2", "type": "int"},
+      "2": {"label": "Temperature", "type": "float"}
+    }
   }
 }
 ```
@@ -300,19 +329,21 @@ void loop() {
 ```
 
 **STM32 HAL:**
+
 ```c
 char buf[128];
-snprintf(buf, sizeof(buf), "%ld,%ld,%.2f\r\n", 
-         enc1, enc2, temp);
+snprintf(buf, sizeof(buf), "%ld,%ld,%.2f\r\n", enc1, enc2, temp);
 HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
 ```
 
 **ESP32:**
+
 ```cpp
 Serial.printf("%d,%.3f\n", adc, voltage);
 ```
 
 **Python Simulator:**
+
 ```python
 import serial, time
 ser = serial.Serial('/dev/ttyUSB0', 115200)
@@ -464,11 +495,11 @@ Operation: multiply, Value: V/count
 
 **Enhanced Table Display:**
 ```
-| Field     | Raw Value | Transformed Value | Transform            | Status        |
-|-----------|-----------|-------------------|---------------------|---------------|
-| Time      | 13,871    | 13.871 s         | [All Transforms ▼] | rx: now       |
-| Encoder 1 | 15,616    | 2.2 °            | [Degrees ▼]        | ch: now       |
-| Encoder 2 | 0         | 0.000 rev        | [All Transforms ▼] | rx: now       |
+| Port          | Field     | Raw Value | Transformed Value | Transform            | Status  |
+|---------------|-----------|-----------|-------------------|----------------------|---------|
+| /dev/ttyUSB0  | Time      | 13,871    | 13.871 s         | [All Transforms ▼]   | rx: now |
+| /dev/ttyUSB0  | Encoder 1 | 15,616    | 2.2 °            | [Degrees ▼]          | ch: now |
+| /dev/ttyUSB1  | Sensor    | 0         | 0.000 V          | [All Transforms ▼]   | rx: now |
 ```
 
 **Interactive Transformation Selection:**
@@ -686,7 +717,7 @@ HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
 
 **Run:**
 ```bash
-monitor -c phase_tracker.json -p /dev/ttyACM0
+monitor -c phase_tracker.json
 ```
 
 ### Example 2: Power Supply Monitor
@@ -768,7 +799,7 @@ printf("%u,%u,%.1f,%s\n", v_adc, i_adc, temp, status);
 
 ### No Ports Found
 
-**Symptoms:** `monitor --list-ports` shows nothing
+**Symptoms:** `monitor --list` shows nothing
 
 **Solutions:**
 ```bash
@@ -793,9 +824,10 @@ ls -l /dev/ttyUSB* /dev/ttyACM*
 cat /dev/ttyUSB0
 # Should see: 1234,5678,98.6
 
-# Check baudrate matches
+# Check baudrate in config matches MCU
 # Verify cable quality
 # Check field positions in config
+# Ensure port is specified correctly in config
 ```
 
 ### Data Parsing Errors
@@ -823,16 +855,16 @@ cat /dev/ttyUSB0
 ```bash
 # Add to dialout group
 sudo usermod -a -G dialout $USER
+# Logout/login required for group change to take effect
 
-# Or run with sudo (not recommended)
-sudo monitor -c config.json -p /dev/ttyUSB0
+# Verify group membership
+groups
 ```
 
 ### GUI Performance Issues
 
 **Solutions:**
 - Reduce MCU update rate (< 100Hz recommended)
-- Increase `refresh_rate` in config
 - Use simpler format strings
 - Reduce number of transformations
 
@@ -844,27 +876,6 @@ sudo monitor -c config.json -p /dev/ttyUSB0
 - Resize window to refresh layout
 - Check window is large enough for content
 - Restart application if dropdowns disappear
-
-### Port Selection Issues
-
-**Symptoms:** Expected ports not showing in selection dialog
-
-**Solutions:**
-- Check device is properly connected
-- Try different USB port
-- Verify drivers installed (Windows)
-- Use `monitor --list-ports` to see all devices
-- Some ports filtered out if description is "n/a"
-
-### Large Font Display Issues
-
-**Symptoms:** Text cut off or overlapping
-
-**Solutions:**
-- Increase window size in config
-- Use smaller format strings
-- Reduce field label length
-- Adjust column widths programmatically
 
 ### Configuration Errors
 
@@ -879,12 +890,12 @@ sudo monitor -c config.json -p /dev/ttyUSB0
 ### Debug Mode
 
 ```bash
-monitor -c config.json -p /dev/ttyUSB0 -v
+monitor -c config.json -v
 ```
 
 Shows:
-- Connection details
-- Data parsing
+- Port connection details
+- Data parsing from each port
 - Transformation calculations
 - Error stack traces
 
@@ -898,9 +909,12 @@ Begin basic, add complexity:
 ```json
 {
   "title": "Test",
-  "fields": {
-    "0": "Value 1",
-    "1": "Value 2"
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Value 1", "type": "int"},
+      "1": {"label": "Value 2", "type": "int"}
+    }
   }
 }
 ```
@@ -934,17 +948,32 @@ Degrees: 360 / 1600 = 0.225 °/count
 
 ### 5. Use Meaningful Colors
 
-- Red: Warnings, critical values
-- Green: Normal operation, encoders
-- Blue: Time, status information
+Field names can be colored for quick visual identification:
+
+- **Red**: Warnings, critical values, errors
+- **Green**: Normal operation, encoders, success states
+- **Blue**: Time, timestamps, status information
+- **Orange**: Intermediate values, temperatures
+- **Purple**: Debug fields, auxiliary sensors
+- **Black**: Default, standard fields
+
+Colors are applied to field names in the table view. Example:
+```json
+{
+  "label": "Temperature",
+  "color": "red",
+  "type": "float"
+}
+```
 
 ### 6. Backup Configs
 
+Organize your configurations:
 ```
 configs/
-├── encoder_test.json
+├── single_encoder.json
+├── dual_port_monitor.json
 ├── production.json
-├── calibration.json
 └── debug.json
 ```
 
@@ -1001,21 +1030,51 @@ Adjust based on content:
 
 **Simple monitoring:**
 ```json
-{"label": "Temp", "type": "float", "format": "{:.1f}", "unit": "°C"}
+{
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Temp", "type": "float", "format": "{:.1f}", "unit": "°C"}
+    }
+  }
+}
 ```
 
 **With transformation:**
 ```json
 {
-  "label": "ADC",
-  "type": "int",
-  "transformations": [{
-    "label": "Voltage",
-    "operation": "multiply",
-    "value": 0.000805,
-    "format": "{:.3f}",
-    "unit": "V"
-  }]
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {
+        "label": "ADC",
+        "type": "int",
+        "transformations": [{
+          "label": "Voltage",
+          "operation": "multiply",
+          "value": 0.000805,
+          "format": "{:.3f}",
+          "unit": "V"
+        }]
+      }
+    }
+  }
+}
+```
+
+**Multi-port setup:**
+```json
+{
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Encoder 1", "type": "int"}
+    },
+    "/dev/ttyUSB1": {
+      "baudrate": 9600,
+      "0": {"label": "Sensor", "type": "float"}
+    }
+  }
 }
 ```
 
@@ -1025,9 +1084,21 @@ Adjust based on content:
 
 ### Essential Commands
 ```bash
-monitor --create-config              # Template
-monitor --list-ports                 # Ports
-monitor -c config.json -p PORT       # Run
+monitor --create-config > config.json  # Generate template
+monitor --list                         # List ports  
+monitor -c config.json                 # Run
+```
+
+### Configuration Structure
+```json
+{
+  "ports": {
+    "/dev/ttyUSB0": {
+      "baudrate": 115200,
+      "0": {"label": "Field", "type": "int"}
+    }
+  }
+}
 ```
 
 ### Data Format

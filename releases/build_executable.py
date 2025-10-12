@@ -11,12 +11,19 @@ from pathlib import Path
 def build_executable():
     """Build the executable using PyInstaller"""
     
-    # Ensure we're in the project root
-    project_root = Path(__file__).parent
+    # This script is in the releases folder, so go up one level to project root
+    releases_folder = Path(__file__).parent
+    project_root = releases_folder.parent
     os.chdir(project_root)
+    
+    print(f"Project root: {project_root}")
+    print(f"Working directory: {os.getcwd()}")
     
     # Entry point script
     entry_point = "src/monitor/monitor.py"
+    
+    # PyInstaller spec file (now in releases folder)
+    spec_file = releases_folder / "okimotus-monitor.spec"
     
     # PyInstaller command
     cmd = [
