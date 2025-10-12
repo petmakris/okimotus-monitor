@@ -87,9 +87,8 @@ class StatusBar:
 class SimpleMonitorGUI:
     """Simplified, robust GUI application for MCU data monitoring"""
     
-    def __init__(self, config: MonitorConfig, baudrate: int = 115200):
+    def __init__(self, config: MonitorConfig):
         self.config = config
-        self.baudrate = baudrate
         self.serial_reader: Optional[MultiPortSerialReader] = None
         self.tree_items: Dict[tuple, str] = {}  # (port, position) -> tree item id
         self.field_data: Dict[tuple, Dict] = {}  # (port, position) -> field metadata
@@ -311,10 +310,17 @@ class SimpleMonitorGUI:
                 print("No ports configured")
                 return
             
-            self.serial_reader = MultiPortSerialReader(ports, self.baudrate)
+            # Build port configs with baudrates from configuration
+            port_configs = {}
+            for port in ports:
+                baudrate = self.config.get_port_baudrate(port)
+                port_configs[port] = baudrate
+                print(f"Port {port}: {baudrate} baud")
+            
+            self.serial_reader = MultiPortSerialReader(port_configs)
             self.serial_reader.add_data_callback(self.on_serial_data)
             self.serial_reader.add_error_callback(self.on_serial_error)
-            print(f"Serial reader setup for ports: {', '.join(ports)}")
+            print(f"Serial reader setup for {len(ports)} port(s)")
         except Exception as e:
             print(f"Failed to setup serial: {e}")
             messagebox.showerror("Serial Error", f"Failed to setup serial connection: {e}")

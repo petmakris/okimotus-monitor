@@ -11,6 +11,7 @@ class MonitorConfig:
     
     def __init__(self, config_file: str = None, config_dict: dict = None):
         self.ports: Dict[str, Dict[int, Dict[str, Any]]] = {}  # port -> position -> field config
+        self.port_settings: Dict[str, Dict[str, Any]] = {}  # port -> settings (baudrate, etc.)
         self.title: str = "MCU Monitor"
         self.refresh_rate: int = 100  # milliseconds
         self.window_size: tuple = (800, 600)
@@ -47,9 +48,19 @@ class MonitorConfig:
         # Parse ports configuration (new multi-port format)
         if 'ports' in config_data:
             ports_config = config_data.get('ports', {})
-            for port_name, fields_config in ports_config.items():
+            for port_name, port_data in ports_config.items():
+                # Extract port settings (baudrate, etc.)
+                self.port_settings[port_name] = {
+                    'baudrate': port_data.get('baudrate', 115200)  # Default to 115200 if not specified
+                }
+                
+                # Parse field configurations for this port
                 self.ports[port_name] = {}
-                for position_str, field_config in fields_config.items():
+                for position_str, field_config in port_data.items():
+                    # Skip non-field keys (like 'baudrate')
+                    if position_str == 'baudrate':
+                        continue
+                    
                     try:
                         position = int(position_str)
                         
@@ -78,6 +89,12 @@ class MonitorConfig:
     def get_ports(self) -> List[str]:
         """Get all configured port names"""
         return list(self.ports.keys())
+    
+    def get_port_baudrate(self, port: str) -> int:
+        """Get baudrate for a specific port"""
+        if port in self.port_settings:
+            return self.port_settings[port].get('baudrate', 115200)
+        return 115200  # Default fallback
     
     def get_field_config(self, port: str, position: int) -> Optional[Dict[str, Any]]:
         """Get configuration for a specific field position on a specific port"""
@@ -319,6 +336,7 @@ class MonitorConfig:
             },
             "ports": {
                 "/dev/ttyUSB0": {
+                    "baudrate": 115200,
                     "0": {
                         "label": "Time",
                         "type": "int",

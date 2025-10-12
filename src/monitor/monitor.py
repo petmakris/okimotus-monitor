@@ -21,7 +21,6 @@ def main():
 Examples:
   monitor --create-config               # Create example configuration file
   monitor -c config.json                # Use config file
-  monitor -c config.json -b 9600        # Use config file with specific baudrate
 
 Configuration File Required:
   A JSON configuration file is REQUIRED to define field mappings and serial ports.
@@ -33,10 +32,12 @@ Configuration File Required:
     "window": {"width": 800, "height": 600},
     "ports": {
       "/dev/ttyUSB0": {
+        "baudrate": 115200,
         "0": {"label": "Encoder 1", "type": "int", "format": "{:,}", "unit": "counts"},
         "1": {"label": "Encoder 2", "type": "int", "format": "{:,}", "unit": "counts"}
       },
       "/dev/ttyUSB1": {
+        "baudrate": 9600,
         "0": {"label": "Temperature", "type": "float", "format": "{:.2f}", "unit": "°C"}
       }
     }
@@ -50,20 +51,11 @@ MCU Data Format:
         """
     )
     
-    # Connection options
-    connection_group = parser.add_argument_group("Connection")
-    connection_group.add_argument(
-        "-b", "--baudrate",
-        type=int,
-        default=115200,
-        help="Serial baudrate (default: 115200)"
-    )
-    
     # Configuration options
     config_group = parser.add_argument_group("Configuration")
     config_group.add_argument(
         "-c", "--config",
-        help="Configuration file path (JSON format). If not specified, uses demo configuration."
+        help="Configuration file path (JSON format). Required to run the monitor."
     )
     config_group.add_argument(
         "--create-config",
@@ -102,13 +94,7 @@ MCU Data Format:
     if not args.config:
         # No config file specified - show help and exit
         parser.print_help()
-        print("\n" + "="*60)
         print("ERROR: Configuration file is required")
-        print("="*60)
-        print("\nQuick start:")
-        print("  1. Create a config file:  monitor --create-config")
-        print("  2. Edit the config file:  nano monitor_config.json")
-        print("  3. Run the monitor:       monitor -c monitor_config.json")
         sys.exit(1)
     
     try:
@@ -133,6 +119,7 @@ MCU Data Format:
 {
   "ports": {
     "/dev/ttyUSB0": {
+      "baudrate": 115200,
       "0": {"label": "Field 1", "type": "int"},
       "1": {"label": "Field 2", "type": "float"}
     }
@@ -140,10 +127,12 @@ MCU Data Format:
 }
 """)
         
-        gui = MonitorGUI(config, args.baudrate)
+        gui = MonitorGUI(config)
         
         print(f"Starting monitor with {len(ports)} port(s): {', '.join(ports)}")
-        print(f"Baudrate: {args.baudrate}")
+        for port in ports:
+            baudrate = config.get_port_baudrate(port)
+            print(f"  {port}: {baudrate} baud")
         
         # Auto-connect after GUI is ready
         gui.root.after(100, gui.connect)

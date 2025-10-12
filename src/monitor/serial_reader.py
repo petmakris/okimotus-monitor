@@ -222,22 +222,20 @@ def list_serial_ports() -> List[tuple]:
 class MultiPortSerialReader:
     """Manages multiple serial port readers"""
     
-    def __init__(self, ports: List[str], baudrate: int = 115200, **serial_kwargs):
+    def __init__(self, port_configs: Dict[str, int], **serial_kwargs):
         """
         Initialize multi-port reader
         
         Args:
-            ports: List of port names to read from
-            baudrate: Baudrate for all ports
+            port_configs: Dictionary mapping port names to baudrates {'/dev/ttyUSB0': 115200, ...}
             **serial_kwargs: Additional serial port arguments
         """
-        self.ports = ports
-        self.baudrate = baudrate
+        self.port_configs = port_configs
         self.serial_kwargs = serial_kwargs
         
-        # Create a SerialReader for each port
+        # Create a SerialReader for each port with its specific baudrate
         self.readers: Dict[str, SerialReader] = {}
-        for port in ports:
+        for port, baudrate in port_configs.items():
             self.readers[port] = SerialReader(port, baudrate, **serial_kwargs)
         
         # Callbacks
