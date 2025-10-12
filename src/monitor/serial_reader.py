@@ -219,6 +219,91 @@ def list_serial_ports() -> List[tuple]:
     return ports
 
 
+class MultiPortSerialReader:
+    """Manages multiple serial port readers"""
+    
+    def __init__(self, ports: List[str], baudrate: int = 115200, **serial_kwargs):
+        """
+        Initialize multi-port reader
+        
+        Args:
+            ports: List of port names to read from
+            baudrate: Baudrate for all ports
+            **serial_kwargs: Additional serial port arguments
+        """
+        self.ports = ports
+        self.baudrate = baudrate
+        self.serial_kwargs = serial_kwargs
+        
+        # Create a SerialReader for each port
+        self.readers: Dict[str, SerialReader] = {}
+        for port in ports:
+            self.readers[port] = SerialReader(port, baudrate, **serial_kwargs)
+        
+        # Callbacks
+        self._data_callbacks: List[Callable[[str, Dict[int, str]], None]] = []  # (port, data)
+        self._error_callbacks: List[Callable[[str, Exception], None]] = []  # (port, error)
+        
+        # Setup callbacks for each reader
+        for port, reader in self.readers.items():
+            reader.add_data_callback(lambda data, p=port: self._on_port_data(p, data))
+            reader.add_error_callback(lambda error, p=port: self._on_port_error(p, error))
+    
+    def add_data_callback(self, callback: Callable[[str, Dict[int, str]], None]):
+        """Add callback for new data. Signature: callback(port, data)"""
+        self._data_callbacks.append(callback)
+    
+    def add_error_callback(self, callback: Callable[[str, Exception], None]):
+        """Add callback for errors. Signature: callback(port, error)"""
+        self._error_callbacks.append(callback)
+    
+    def _on_port_data(self, port: str, data: Dict[int, str]):
+        """Handle data from a specific port"""
+        for callback in self._data_callbacks:
+            try:
+                callback(port, data)
+            except Exception as e:
+                logging.error(f"Error in data callback for port {port}: {e}")
+    
+    def _on_port_error(self, port: str, error: Exception):
+        """Handle error from a specific port"""
+        for callback in self._error_callbacks:
+            try:
+                callback(port, error)
+            except Exception as e:
+                logging.error(f"Error in error callback for port {port}: {e}")
+    
+    def start_reading(self):
+        """Start reading from all ports"""
+        for port, reader in self.readers.items():
+            try:
+                reader.start_reading()
+                logging.info(f"Started reading from {port}")
+            except Exception as e:
+                logging.error(f"Failed to start reading from {port}: {e}")
+                self._on_port_error(port, e)
+    
+    def stop_reading(self):
+        """Stop reading from all ports"""
+        for port, reader in self.readers.items():
+            try:
+                reader.stop_reading()
+                logging.info(f"Stopped reading from {port}")
+            except Exception as e:
+                logging.error(f"Error stopping {port}: {e}")
+    
+    def get_stats(self) -> Dict[str, Dict[str, Any]]:
+        """Get statistics for all ports"""
+        stats = {}
+        for port, reader in self.readers.items():
+            stats[port] = reader.get_stats()
+        return stats
+    
+    def get_reader(self, port: str) -> Optional[SerialReader]:
+        """Get the SerialReader for a specific port"""
+        return self.readers.get(port)
+
+
 if __name__ == "__main__":
     # Test the serial reader
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')

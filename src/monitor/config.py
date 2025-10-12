@@ -10,7 +10,7 @@ class MonitorConfig:
     """Configuration parser for MCU data monitoring"""
     
     def __init__(self, config_file: str = None, config_dict: dict = None):
-        self.fields: Dict[int, Dict[str, Any]] = {}
+        self.ports: Dict[str, Dict[int, Dict[str, Any]]] = {}  # port -> position -> field config
         self.title: str = "MCU Monitor"
         self.refresh_rate: int = 100  # milliseconds
         self.window_size: tuple = (800, 600)
@@ -44,45 +44,56 @@ class MonitorConfig:
             window_config.get('height', 600)
         )
         
-        # Parse field configurations
-        fields_config = config_data.get('fields', {})
-        for position_str, field_config in fields_config.items():
-            try:
-                position = int(position_str)
-                
-                # Handle both simple string labels and complex field configs
-                if isinstance(field_config, str):
-                    self.fields[position] = {
-                        'label': field_config,
-                        'type': 'string',
-                        'format': '{}',
-                        'unit': ''
-                    }
-                else:
-                    self.fields[position] = {
-                        'label': field_config.get('label', f'Field {position}'),
-                        'type': field_config.get('type', 'string'),
-                        'format': field_config.get('format', '{}'),
-                        'unit': field_config.get('unit', ''),
-                        'color': field_config.get('color', 'black'),
-                        'min': field_config.get('min'),
-                        'max': field_config.get('max'),
-                        'transformations': field_config.get('transformations', [])
-                    }
-            except (ValueError, TypeError) as e:
-                logging.warning(f"Invalid field position '{position_str}': {e}")
+        # Parse ports configuration (new multi-port format)
+        if 'ports' in config_data:
+            ports_config = config_data.get('ports', {})
+            for port_name, fields_config in ports_config.items():
+                self.ports[port_name] = {}
+                for position_str, field_config in fields_config.items():
+                    try:
+                        position = int(position_str)
+                        
+                        # Handle both simple string labels and complex field configs
+                        if isinstance(field_config, str):
+                            self.ports[port_name][position] = {
+                                'label': field_config,
+                                'type': 'string',
+                                'format': '{}',
+                                'unit': ''
+                            }
+                        else:
+                            self.ports[port_name][position] = {
+                                'label': field_config.get('label', f'Field {position}'),
+                                'type': field_config.get('type', 'string'),
+                                'format': field_config.get('format', '{}'),
+                                'unit': field_config.get('unit', ''),
+                                'color': field_config.get('color', 'black'),
+                                'min': field_config.get('min'),
+                                'max': field_config.get('max'),
+                                'transformations': field_config.get('transformations', [])
+                            }
+                    except (ValueError, TypeError) as e:
+                        logging.warning(f"Invalid field position '{position_str}' for port {port_name}: {e}")
     
-    def get_field_config(self, position: int) -> Optional[Dict[str, Any]]:
-        """Get configuration for a specific field position"""
-        return self.fields.get(position)
+    def get_ports(self) -> List[str]:
+        """Get all configured port names"""
+        return list(self.ports.keys())
     
-    def get_all_positions(self) -> List[int]:
-        """Get all configured field positions sorted"""
-        return sorted(self.fields.keys())
+    def get_field_config(self, port: str, position: int) -> Optional[Dict[str, Any]]:
+        """Get configuration for a specific field position on a specific port"""
+        if port not in self.ports:
+            return None
+        return self.ports[port].get(position)
     
-    def format_value(self, position: int, raw_value: str) -> str:
+    def get_all_positions(self, port: str) -> List[int]:
+        """Get all configured field positions for a specific port"""
+        if port not in self.ports:
+            return []
+        return sorted(self.ports[port].keys())
+    
+    def format_value(self, port: str, position: int, raw_value: str) -> str:
         """Format a raw value according to field configuration (base format only)"""
-        field_config = self.get_field_config(position)
+        field_config = self.get_field_config(port, position)
         if not field_config:
             return raw_value
         
@@ -114,15 +125,15 @@ class MonitorConfig:
             logging.warning(f"Failed to format value '{raw_value}' for position {position}: {e}")
             return '---'  # Return placeholder instead of raw value
 
-    def apply_all_transformations(self, position: int, raw_value: str) -> str:
+    def apply_all_transformations(self, port: str, position: int, raw_value: str) -> str:
         """Apply all transformations in series and return the final formatted result"""
-        field_config = self.get_field_config(position)
+        field_config = self.get_field_config(port, position)
         if not field_config:
             return raw_value
         
         transformations = field_config.get('transformations', [])
         if not transformations:
-            return self.format_value(position, raw_value)
+            return self.format_value(port, position, raw_value)
         
         # Clean and validate the raw value
         cleaned_value = raw_value.strip()
@@ -137,7 +148,7 @@ class MonitorConfig:
             elif field_type == 'float':
                 current_value = float(cleaned_value)
             else:
-                return self.format_value(position, raw_value)  # Can't transform non-numeric
+                return self.format_value(port, position, raw_value)  # Can't transform non-numeric
             
             # Apply all transformations in series
             for transformation in transformations:
@@ -151,9 +162,9 @@ class MonitorConfig:
             logging.warning(f"Failed to apply transformations for position {position}: {e}")
             return '---'
 
-    def get_transformation_steps(self, position: int, raw_value: str) -> List[Dict[str, Any]]:
+    def get_transformation_steps(self, port: str, position: int, raw_value: str) -> List[Dict[str, Any]]:
         """Get all transformation steps with intermediate values"""
-        field_config = self.get_field_config(position)
+        field_config = self.get_field_config(port, position)
         if not field_config:
             return []
         
@@ -182,7 +193,7 @@ class MonitorConfig:
             steps.append({
                 'label': f"Raw {field_config.get('label', 'Value')}",
                 'value': current_value,
-                'formatted': self.format_value(position, raw_value)
+                'formatted': self.format_value(port, position, raw_value)
             })
             
             # Apply transformations step by step
@@ -239,9 +250,9 @@ class MonitorConfig:
             logging.warning(f"Failed to format transformed value: {e}")
             return str(transformed_value)
     
-    def get_transformed_values(self, position: int, raw_value: str) -> List[Dict[str, str]]:
+    def get_transformed_values(self, port: str, position: int, raw_value: str) -> List[Dict[str, str]]:
         """Get all transformed values for a field position"""
-        field_config = self.get_field_config(position)
+        field_config = self.get_field_config(port, position)
         if not field_config:
             return []
         
@@ -306,61 +317,63 @@ class MonitorConfig:
                 "width": 1000,
                 "height": 600
             },
-            "fields": {
-                "0": {
-                    "label": "Time",
-                    "type": "int",
-                    "format": "{:,}",
-                    "unit": "counts",
-                    "color": "blue",
-                    "transformations": [
-                        {
-                            "label": "Seconds",
-                            "operation": "divide",
-                            "value": 1000,
-                            "format": "{:.3f}",
-                            "unit": "s"
-                        }
-                    ]
-                },
-                "1": {
-                    "label": "Encoder 1",
-                    "type": "int",
-                    "format": "{:,}",
-                    "unit": "counts",
-                    "color": "green",
-                    "transformations": [
-                        {
-                            "label": "Rotations",
-                            "operation": "divide",
-                            "value": 1600,
-                            "format": "{:.3f}",
-                            "unit": "rev"
-                        },
-                        {
-                            "label": "Degrees",
-                            "operation": "multiply",
-                            "value": 0.225,
-                            "format": "{:.1f}",
-                            "unit": "°"
-                        }
-                    ]
-                },
-                "2": {
-                    "label": "Encoder 2",
-                    "type": "int",
-                    "format": "{:,}",
-                    "unit": "counts",
-                    "color": "red",
-                    "transformations": [
-                        {
-                            "label": "Rotations",
-                            "operation": "divide",
-                            "value": 4096,
-                            "format": "{:.3f}",
-                            "unit": "rev"
-                        }
-                    ]
+            "ports": {
+                "/dev/ttyUSB0": {
+                    "0": {
+                        "label": "Time",
+                        "type": "int",
+                        "format": "{:,}",
+                        "unit": "counts",
+                        "color": "blue",
+                        "transformations": [
+                            {
+                                "label": "Seconds",
+                                "operation": "divide",
+                                "value": 1000,
+                                "format": "{:.3f}",
+                                "unit": "s"
+                            }
+                        ]
+                    },
+                    "1": {
+                        "label": "Encoder 1",
+                        "type": "int",
+                        "format": "{:,}",
+                        "unit": "counts",
+                        "color": "green",
+                        "transformations": [
+                            {
+                                "label": "Rotations",
+                                "operation": "divide",
+                                "value": 1600,
+                                "format": "{:.3f}",
+                                "unit": "rev"
+                            },
+                            {
+                                "label": "Degrees",
+                                "operation": "multiply",
+                                "value": 0.225,
+                                "format": "{:.1f}",
+                                "unit": "°"
+                            }
+                        ]
+                    },
+                    "2": {
+                        "label": "Encoder 2",
+                        "type": "int",
+                        "format": "{:,}",
+                        "unit": "counts",
+                        "color": "red",
+                        "transformations": [
+                            {
+                                "label": "Rotations",
+                                "operation": "divide",
+                                "value": 4096,
+                                "format": "{:.3f}",
+                                "unit": "rev"
+                            }
+                        ]
+                    }
                 }
             }
         }

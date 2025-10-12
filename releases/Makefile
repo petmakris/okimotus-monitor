@@ -1,4 +1,5 @@
 # Makefile for building Okimotus Monitor executables
+# Run from the releases folder: cd releases && make build
 
 .PHONY: help install build-deps build-pyinstaller build-cxfreeze clean test
 
@@ -13,10 +14,10 @@ help:
 	@echo "  dist-clean    - Clean all build and distribution files"
 
 install:
-	pip install -e .
+	cd .. && pip install -e .
 
 build-deps:
-	pip install -e .[build]
+	cd .. && pip install -e .[build]
 
 build: build-pyinstaller
 
@@ -28,24 +29,24 @@ build-cxfreeze: build-deps
 	python setup_cxfreeze.py build
 
 clean:
-	rm -rf build/
-	rm -rf dist/
-	rm -rf *.spec
-	find . -name "*.pyc" -delete
-	find . -name "__pycache__" -type d -exec rm -rf {} +
+	cd .. && rm -rf build/
+	cd .. && rm -rf dist/
+	cd .. && rm -rf *.spec
+	find .. -name "*.pyc" -delete
+	find .. -name "__pycache__" -type d -exec rm -rf {} +
 
 dist-clean: clean
-	rm -rf *.egg-info/
+	cd .. && rm -rf *.egg-info/
 
 test:
-	python -m pytest
+	cd .. && python -m pytest
 
 # Platform-specific builds
 build-linux: build-deps
-	pyinstaller --onefile --name okimotus-monitor-linux src/monitor/monitor.py
+	cd .. && pyinstaller --onefile --name okimotus-monitor-linux src/monitor/monitor.py
 
 build-windows: build-deps
-	pyinstaller --onefile --windowed --name okimotus-monitor-windows src/monitor/monitor.py
+	cd .. && pyinstaller --onefile --windowed --name okimotus-monitor-windows src/monitor/monitor.py
 
 # Quick development test
 run:

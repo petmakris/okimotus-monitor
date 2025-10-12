@@ -108,7 +108,11 @@ Download the pre-built executable for your platform from the releases page, or b
 # Install build dependencies
 pip install pyinstaller
 
-# Build executable
+# Option A: Build from project root (recommended)
+python build_release.py
+
+# Option B: Build from releases folder
+cd releases
 python build_executable.py
 ```
 
@@ -125,7 +129,7 @@ monitor --help
 
 **Dependencies:** Python 3.7+, tkinter, pyserial
 
-For building executables, see [BUILD.md](BUILD.md) for detailed instructions.
+**Building Releases:** All release/build related files are in the `releases/` folder. See [releases/BUILD.md](releases/BUILD.md) for detailed build instructions.
 
 ---
 
