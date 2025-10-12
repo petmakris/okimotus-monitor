@@ -270,8 +270,15 @@ Each port in the `ports` object must specify:
 | `type` | string | "string" | int, float, string |
 | `format` | string | "{}" | Format string |
 | `unit` | string | "" | Unit label |
-| `color` | string | "black" | red, blue, green, etc. |
+| `color` | string | "black" | Field name color (see below) |
 | `transformations` | array | [] | Calculations |
+
+**Supported Colors:**
+- `red`, `green`, `blue`, `black` (default)
+- `orange`, `purple`, `brown`
+- `pink`, `cyan`, `magenta`, `yellow`, `gray`
+
+Colors are applied to the field name in the table for visual differentiation.
 
 ---
 
@@ -941,9 +948,23 @@ Degrees: 360 / 1600 = 0.225 °/count
 
 ### 5. Use Meaningful Colors
 
-- Red: Warnings, critical values
-- Green: Normal operation, encoders
-- Blue: Time, status information
+Field names can be colored for quick visual identification:
+
+- **Red**: Warnings, critical values, errors
+- **Green**: Normal operation, encoders, success states
+- **Blue**: Time, timestamps, status information
+- **Orange**: Intermediate values, temperatures
+- **Purple**: Debug fields, auxiliary sensors
+- **Black**: Default, standard fields
+
+Colors are applied to field names in the table view. Example:
+```json
+{
+  "label": "Temperature",
+  "color": "red",
+  "type": "float"
+}
+```
 
 ### 6. Backup Configs
 

@@ -140,6 +140,10 @@ class SimpleMonitorGUI:
         # Configure Combobox fonts
         style.configure('Large.TCombobox', font=self.table_font)
         
+        # Define color tags for field labels (will be applied after tree creation)
+        self.color_tags = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 
+                          'pink', 'cyan', 'magenta', 'yellow', 'gray', 'black']
+        
         # Main container
         main_frame = ttk.Frame(self.root, padding="10")
         main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
@@ -217,6 +221,10 @@ class SimpleMonitorGUI:
         self.tree.heading('status', text='Status')
         self.tree.column('status', width=200, anchor='w')
         
+        # Configure color tags for field labels
+        for color in self.color_tags:
+            self.tree.tag_configure(color, foreground=color)
+        
         # Scrollbar
         scrollbar = ttk.Scrollbar(table_frame, orient='vertical', command=self.tree.yview)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -250,6 +258,12 @@ class SimpleMonitorGUI:
                 field_config = self.config.get_field_config(port, position)
                 field_name = field_config.get('label', f'Field {position}') if field_config else f'Field {position}'
                 
+                # Get color for this field (default to black if not specified or invalid)
+                field_color = field_config.get('color', 'black') if field_config else 'black'
+                # Validate color is in our supported list
+                if field_color not in self.color_tags:
+                    field_color = 'black'
+                
                 # Create transformation options
                 transform_options = ["Raw Value"]  # Default option
                 transformations = field_config.get('transformations', []) if field_config else []
@@ -270,7 +284,7 @@ class SimpleMonitorGUI:
                 default_selection = "All Transforms (Final)" if transformations else "Raw Value"
                 self.transform_vars[key].set(default_selection)
                 
-                # Insert row with placeholder for transform dropdown
+                # Insert row with placeholder for transform dropdown and color tag
                 item_id = self.tree.insert('', 'end', values=[
                     port,
                     field_name, 
@@ -278,7 +292,7 @@ class SimpleMonitorGUI:
                     '---', 
                     '', # Placeholder for dropdown
                     'No data'
-                ])
+                ], tags=(field_color,))
                 
                 # Store mapping
                 self.tree_items[key] = item_id
