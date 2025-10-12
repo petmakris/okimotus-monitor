@@ -8,8 +8,10 @@ import os
 # Add the parent directory to the path so we can import monitor modules
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from monitor.config import MonitorConfig, create_default_config_file
+from monitor.config import MonitorConfig
 from monitor.gui import SimpleMonitorGUI as MonitorGUI
+from monitor.serial_reader import list_serial_ports
+import json
 
 
 def main():
@@ -19,16 +21,16 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  monitor --create-config               # Create example configuration file
+  monitor --create-config               # Print example configuration to stdout
+  monitor --list                        # List available serial ports
   monitor -c config.json                # Use config file
 
 Configuration File Required:
   A JSON configuration file is REQUIRED to define field mappings and serial ports.
-  Use --create-config to generate an example file.
+  Use --create-config to generate an example (redirect to file: monitor --create-config > config.json)
   
   {
     "title": "My MCU Monitor",
-    "refresh_rate": 100,
     "window": {"width": 800, "height": 600},
     "ports": {
       "/dev/ttyUSB0": {
@@ -60,11 +62,16 @@ MCU Data Format:
     config_group.add_argument(
         "--create-config",
         action="store_true",
-        help="Create an example configuration file and exit"
+        help="Print an example configuration to stdout and exit"
     )
     
     # Information options
     info_group = parser.add_argument_group("Information")
+    info_group.add_argument(
+        "--list",
+        action="store_true",
+        help="List available serial ports and exit"
+    )
     info_group.add_argument(
         "-v", "--verbose",
         action="store_true",
@@ -77,17 +84,29 @@ MCU Data Format:
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format='%(message)s')
     
+    # Handle --list command
+    if args.list:
+        print("Available serial ports:")
+        print("-" * 60)
+        ports = list_serial_ports()
+        if ports:
+            for port, desc, hwid in ports:
+                print(f"  {port:<20} {desc}")
+                if args.verbose and hwid:
+                    print(f"    Hardware ID: {hwid}")
+            print("-" * 60)
+            print(f"Found {len(ports)} port(s)")
+        else:
+            print("  No serial ports found")
+            print("-" * 60)
+        return
+    
     # Handle information commands (create-config)
     if args.create_config:
-        config_file = "monitor_config.json"
-        try:
-            create_default_config_file(config_file)
-            print(f"Created example configuration file: {config_file}")
-            print(f"Edit this file to customize your field mappings, then run:")
-            print(f"  monitor -c {config_file}")
-        except Exception as e:
-            print(f"Failed to create configuration file: {e}")
-            sys.exit(1)
+        # Create example config and print to stdout
+        config = MonitorConfig()
+        example_config = config.create_example_config()
+        print(json.dumps(example_config, indent=2))
         return
     
     # Load configuration
@@ -100,7 +119,7 @@ MCU Data Format:
     try:
         if not os.path.exists(args.config):
             print(f"Configuration file not found: {args.config}")
-            print("Use --create-config to create an example configuration file.")
+            print("Use --create-config to generate an example: monitor --create-config > config.json")
             sys.exit(1)
         
         config = MonitorConfig(config_file=args.config)

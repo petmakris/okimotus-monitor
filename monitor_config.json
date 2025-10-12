@@ -1,6 +1,5 @@
 {
   "title": "Phase Tracker",
-  "refresh_rate": 100,
   "window": {
     "width": 1000,
     "height": 600

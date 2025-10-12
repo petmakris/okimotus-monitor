@@ -1,8 +1,5 @@
 #!/usr/bin/env python3
-"""
-Convenience wrapper to build from project root.
-This script just calls the actual build script in the releases folder.
-"""
+
 
 import sys
 import subprocess
@@ -15,7 +12,6 @@ if __name__ == "__main__":
     
     print("Building release executable...")
     print(f"Using build script: {build_script}")
-    print("-" * 60)
     
     # Run the actual build script
     result = subprocess.run([sys.executable, str(build_script)])

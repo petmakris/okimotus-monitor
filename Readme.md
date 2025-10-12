@@ -211,7 +211,6 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 ```json
 {
   "title": "Monitor Title",
-  "refresh_rate": 100,
   "window": {"width": 1400, "height": 500},
   "fields": {
     "0": { /* field config */ },
@@ -225,7 +224,6 @@ monitor -c config.json -p /dev/ttyUSB0 -v  # Debug mode
 | Property | Default | Description |
 |----------|---------|-------------|
 | `title` | "MCU Monitor" | Window title |
-| `refresh_rate` | 100 | Update interval (ms) |
 | `window.width` | 800 | Window width (px) |
 | `window.height` | 600 | Window height (px) |
 
@@ -836,7 +834,6 @@ sudo monitor -c config.json -p /dev/ttyUSB0
 
 **Solutions:**
 - Reduce MCU update rate (< 100Hz recommended)
-- Increase `refresh_rate` in config
 - Use simpler format strings
 - Reduce number of transformations
 

@@ -13,7 +13,6 @@ class MonitorConfig:
         self.ports: Dict[str, Dict[int, Dict[str, Any]]] = {}  # port -> position -> field config
         self.port_settings: Dict[str, Dict[str, Any]] = {}  # port -> settings (baudrate, etc.)
         self.title: str = "MCU Monitor"
-        self.refresh_rate: int = 100  # milliseconds
         self.window_size: tuple = (800, 600)
         
         if config_file:
@@ -38,7 +37,6 @@ class MonitorConfig:
         """Load configuration from dictionary"""
         # Extract global settings
         self.title = config_data.get('title', self.title)
-        self.refresh_rate = config_data.get('refresh_rate', self.refresh_rate)
         window_config = config_data.get('window', {})
         self.window_size = (
             window_config.get('width', 800),
@@ -329,7 +327,6 @@ class MonitorConfig:
         """Create an example configuration dictionary"""
         return {
             "title": "Phase Tracker",
-            "refresh_rate": 100,
             "window": {
                 "width": 1000,
                 "height": 600
