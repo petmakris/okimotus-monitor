@@ -4,10 +4,10 @@
 
 > 💡 **Quick Start:** `monitor --create-config` → edit config → `monitor -c config.json -p /dev/ttyUSB0`
 
-![Main Interface](ui-1.png)
+![Main Interface](doc/ui-1.png)
 *Enhanced UI with transformation dropdowns and larger fonts for electronics bench viewing*
 
-![Port Selection](ui-2.png)
+![Port Selection](doc/ui-2.png)
 *Clean port selection dialog showing only meaningful devices*
 
 ---
