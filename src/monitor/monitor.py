@@ -18,39 +18,7 @@ def main():
     """Main entry point for monitor command"""
     parser = argparse.ArgumentParser(
         description="MCU Data Monitor - Real-time GUI for comma-separated MCU data",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  monitor --create-config               # Print example configuration to stdout
-  monitor --list                        # List available serial ports
-  monitor -c config.json                # Use config file
-
-Configuration File Required:
-  A JSON configuration file is REQUIRED to define field mappings and serial ports.
-  Use --create-config to generate an example (redirect to file: monitor --create-config > config.json)
-  
-  {
-    "title": "My MCU Monitor",
-    "window": {"width": 800, "height": 600},
-    "ports": {
-      "/dev/ttyUSB0": {
-        "baudrate": 115200,
-        "0": {"label": "Encoder 1", "type": "int", "format": "{:,}", "unit": "counts"},
-        "1": {"label": "Encoder 2", "type": "int", "format": "{:,}", "unit": "counts"}
-      },
-      "/dev/ttyUSB1": {
-        "baudrate": 9600,
-        "0": {"label": "Temperature", "type": "float", "format": "{:.2f}", "unit": "°C"}
-      }
-    }
-  }
-
-MCU Data Format:
-  Send comma-separated values from your MCU:
-  "1234,5678,active,temp_sensor,42,98765"
-  
-  Each position (0,1,2...) maps to a configured field for that port.
-        """
+        formatter_class=argparse.RawDescriptionHelpFormatter
     )
     
     # Configuration options
@@ -113,7 +81,8 @@ MCU Data Format:
     if not args.config:
         # No config file specified - show help and exit
         parser.print_help()
-        print("ERROR: Configuration file is required")
+        
+        print("\nERROR: Configuration file is required")
         sys.exit(1)
     
     try:

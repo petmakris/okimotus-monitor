@@ -302,19 +302,21 @@ void loop() {
 ```
 
 **STM32 HAL:**
+
 ```c
 char buf[128];
-snprintf(buf, sizeof(buf), "%ld,%ld,%.2f\r\n", 
-         enc1, enc2, temp);
+snprintf(buf, sizeof(buf), "%ld,%ld,%.2f\r\n", enc1, enc2, temp);
 HAL_UART_Transmit(&huart1, (uint8_t*)buf, strlen(buf), 100);
 ```
 
 **ESP32:**
+
 ```cpp
 Serial.printf("%d,%.3f\n", adc, voltage);
 ```
 
 **Python Simulator:**
+
 ```python
 import serial, time
 ser = serial.Serial('/dev/ttyUSB0', 115200)
