@@ -1,0 +1,68 @@
+title: Phase Tracker
+window:
+  width: 1200
+  height: 480
+ports:
+  /dev/ttyUSB0:
+    baudrate: 115200
+    0:
+      label: Time
+      type: int
+      format: "{:,}"
+      unit: counts
+      color: blue
+      transformations:
+        - label: Seconds
+          operation: divide
+          value: 1000
+          format: "{:.3f}"
+          unit: s
+    1:
+      label: Encoder 1
+      type: int
+      format: "{:,}"
+      unit: counts
+      color: green
+      transformations:
+        - label: Rotations
+          operation: divide
+          value: 1600
+          format: "{:.3f}"
+          unit: rev
+        - label: Degrees
+          operation: multiply
+          value: 0.225
+          format: "{:.1f}"
+          unit: °
+    2:
+      label: Encoder 2
+      type: int
+      format: "{:,}"
+      unit: counts
+      color: red
+      transformations:
+        - label: Rotations
+          operation: divide
+          value: 4096
+          format: "{:.3f}"
+          unit: rev
+  /dev/ttyUSB1:
+    baudrate: 115200
+    0:
+      label: Time
+      type: int
+      format: "{:,}"
+      unit: counts
+      color: blue
+      transformations:
+        - label: Seconds
+          operation: divide
+          value: 1000
+          format: "{:.3f}"
+          unit: s
+    1:
+      label: Speed
+      type: float
+      format: "{:.3f}"
+      unit: counts
+      color: green

@@ -35,16 +35,17 @@
 
 ```bash
 # 1. Generate config template (redirect to file)
-monitor --create-config > my_config.json
+monitor --create-config > my_config.json  # or my_config.yaml
 
-# 2. Edit my_config.json to configure ports and fields
+# 2. Edit my_config.json (or .yaml) to configure ports and fields
 
 # 3. Run
-monitor -c my_config.json
+monitor -c my_config.json  # or my_config.yaml
 ```
 
 ### Minimal Configuration
 
+**JSON:**
 ```json
 {
   "title": "My Monitor",
@@ -56,6 +57,24 @@ monitor -c my_config.json
     }
   }
 }
+```
+
+**YAML (also supported):**
+```yaml
+title: My Monitor
+ports:
+  /dev/ttyUSB0:
+    baudrate: 115200
+    0:
+      label: Temperature
+      type: float
+      format: "{:.1f}"
+      unit: °C
+    1:
+      label: Encoder
+      type: int
+      format: "{:,}"
+      unit: counts
 ```
 
 ### MCU Code
@@ -109,13 +128,13 @@ monitor --help
 |---------|-------------|
 | `monitor --create-config` | Print example config to stdout |
 | `monitor --list` | List available serial ports |
-| `monitor -c FILE` | Run with config file (required) |
+| `monitor -c FILE` | Run with config file (JSON or YAML) |
 | `monitor -v` | Enable verbose logging |
 
 ### All Options
 
 **Configuration:**
-- `-c FILE` - Config file (JSON) - **REQUIRED**
+- `-c FILE` - Config file (JSON or YAML) - **REQUIRED**
 - `--create-config` - Print example configuration to stdout
 
 **Information:**
@@ -173,8 +192,13 @@ monitor -c config.json -v
 
 ## Configuration
 
+### File Formats
+
+The monitor supports both **JSON** and **YAML** configuration files. Use the file extension (`.json`, `.yaml`, or `.yml`) to specify the format.
+
 ### File Structure
 
+**JSON:**
 ```json
 {
   "title": "Monitor Title",
@@ -191,6 +215,25 @@ monitor -c config.json -v
     }
   }
 }
+```
+
+**YAML:**
+```yaml
+title: Monitor Title
+window:
+  width: 1400
+  height: 500
+ports:
+  /dev/ttyUSB0:
+    baudrate: 115200
+    0:
+      # field config
+    1:
+      # field config
+  /dev/ttyUSB1:
+    baudrate: 9600
+    0:
+      # field config
 ```
 
 ### Global Settings
@@ -1084,12 +1127,13 @@ Adjust based on content:
 
 ### Essential Commands
 ```bash
-monitor --create-config > config.json  # Generate template
+monitor --create-config > config.json  # Generate template (JSON)
 monitor --list                         # List ports  
-monitor -c config.json                 # Run
+monitor -c config.json                 # Run (JSON or YAML)
+monitor -c config.yaml                 # YAML also supported
 ```
 
-### Configuration Structure
+### Configuration Structure (JSON or YAML)
 ```json
 {
   "ports": {
@@ -1099,6 +1143,15 @@ monitor -c config.json                 # Run
     }
   }
 }
+```
+
+```yaml
+ports:
+  /dev/ttyUSB0:
+    baudrate: 115200
+    0:
+      label: Field
+      type: int
 ```
 
 ### Data Format

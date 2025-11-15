@@ -10,7 +10,8 @@ SCRIPTS = [
 ]
 
 DEPENDENCIES = [
-    'pyserial>=3.5'
+    'pyserial>=3.5',
+    'pyyaml>=5.1'
 ]
 
 

@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 
 import json
+import yaml
 import logging
+import os
 from typing import Dict, List, Any, Optional
 
 
@@ -21,16 +23,23 @@ class MonitorConfig:
             self.load_from_dict(config_dict)
     
     def load_from_file(self, config_file: str):
-        """Load configuration from JSON file"""
+        """Load configuration from JSON or YAML file"""
         try:
+            # Detect file type by extension
+            _, ext = os.path.splitext(config_file)
+            ext = ext.lower()
+            
             with open(config_file, 'r') as f:
-                config_data = json.load(f)
+                if ext in ['.yaml', '.yml']:
+                    config_data = yaml.safe_load(f)
+                else:
+                    config_data = json.load(f)
                 self.load_from_dict(config_data)
         except FileNotFoundError:
             logging.error(f"Configuration file not found: {config_file}")
             raise
-        except json.JSONDecodeError as e:
-            logging.error(f"Invalid JSON in configuration file: {e}")
+        except (json.JSONDecodeError, yaml.YAMLError) as e:
+            logging.error(f"Invalid configuration file format: {e}")
             raise
     
     def load_from_dict(self, config_data: dict):
@@ -54,13 +63,17 @@ class MonitorConfig:
                 
                 # Parse field configurations for this port
                 self.ports[port_name] = {}
-                for position_str, field_config in port_data.items():
+                for position_key, field_config in port_data.items():
                     # Skip non-field keys (like 'baudrate')
-                    if position_str == 'baudrate':
+                    if position_key == 'baudrate':
                         continue
                     
                     try:
-                        position = int(position_str)
+                        # Handle both string keys (from JSON) and int keys (from YAML)
+                        if isinstance(position_key, int):
+                            position = position_key
+                        else:
+                            position = int(position_key)
                         
                         # Handle both simple string labels and complex field configs
                         if isinstance(field_config, str):
@@ -82,7 +95,7 @@ class MonitorConfig:
                                 'transformations': field_config.get('transformations', [])
                             }
                     except (ValueError, TypeError) as e:
-                        logging.warning(f"Invalid field position '{position_str}' for port {port_name}: {e}")
+                        logging.warning(f"Invalid field position '{position_key}' for port {port_name}: {e}")
     
     def get_ports(self) -> List[str]:
         """Get all configured port names"""
