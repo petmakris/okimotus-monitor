@@ -14,6 +14,22 @@ from monitor.serial_reader import list_serial_ports
 import json
 
 
+def print_ai_cheatsheet():
+    """Print the AI-facing configuration cheatsheet if available"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    candidate_paths = [
+        os.path.abspath(os.path.join(script_dir, "..", "..", "CHEATSHEET_AI.md")),
+        os.path.join(script_dir, "CHEATSHEET_AI.md")
+    ]
+    for path in candidate_paths:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as cheat_file:
+                print(cheat_file.read().rstrip())
+            return True
+    print("AI cheatsheet (CHEATSHEET_AI.md) not found. Please ensure it is installed with the tool.")
+    return False
+
+
 def main():
     """Main entry point for monitor command"""
     parser = argparse.ArgumentParser(
@@ -45,12 +61,21 @@ def main():
         action="store_true",
         help="Enable verbose logging"
     )
+    info_group.add_argument(
+        "--ai",
+        action="store_true",
+        help="Print AI agent configuration guide and exit"
+    )
     
     args = parser.parse_args()
     
     # Setup logging
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logging.basicConfig(level=log_level, format='%(message)s')
+
+    if args.ai:
+        print_ai_cheatsheet()
+        return
     
     # Handle --list command
     if args.list:

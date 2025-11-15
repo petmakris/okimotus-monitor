@@ -129,6 +129,7 @@ monitor --help
 | `monitor --create-config` | Print example config to stdout |
 | `monitor --list` | List available serial ports |
 | `monitor -c FILE` | Run with config file (JSON or YAML) |
+| `monitor --ai` | Print the AI agent configuration guide |
 | `monitor -v` | Enable verbose logging |
 
 ### All Options
@@ -139,6 +140,7 @@ monitor --help
 
 **Information:**
 - `--list` - List available serial ports
+- `--ai` - Print the AI configuration cheatsheet and exit
 - `-v, --verbose` - Enable verbose logging
 - `-h, --help` - Show help message
 
@@ -156,6 +158,9 @@ monitor -c config.json
 
 # Verbose mode for debugging
 monitor -c config.json -v
+
+# Show AI agent cheatsheet
+monitor --ai
 ```
 
 ### GUI Controls

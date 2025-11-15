@@ -107,6 +107,7 @@ class SimpleMonitorGUI:
         self.root.title(config.title)
         self.root.geometry(f"{config.window_size[0]}x{config.window_size[1]}")
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.show_raw_value_var = tk.BooleanVar(master=self.root, value=False)
         
         # Setup UI first
         self.setup_ui()
@@ -180,6 +181,14 @@ class SimpleMonitorGUI:
             style='Large.TButton'
         )
         clear_button.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.show_raw_value_check = ttk.Checkbutton(
+            control_frame,
+            text="Show Raw Value",
+            variable=self.show_raw_value_var,
+            command=self.toggle_raw_value_column
+        )
+        self.show_raw_value_check.pack(side=tk.LEFT, padx=(10, 0))
         
         # Data table
         self.create_data_table(main_frame)
@@ -198,9 +207,9 @@ class SimpleMonitorGUI:
         parent.rowconfigure(2, weight=1)
         
         # Enhanced columns with port and transformation selector
-        columns = ['port', 'field', 'raw_value', 'transformed_value', 'transform_select', 'status']
+        self.table_columns = ['port', 'field', 'raw_value', 'transformed_value', 'transform_select', 'status']
         
-        self.tree = ttk.Treeview(table_frame, columns=columns, show='headings', height=15)
+        self.tree = ttk.Treeview(table_frame, columns=self.table_columns, show='headings', height=15)
         
         # Configure columns with larger widths for bigger fonts
         self.tree.heading('port', text='Port')
@@ -244,8 +253,25 @@ class SimpleMonitorGUI:
         
         # Initialize rows for each configured field
         self.initialize_table_rows()
+        self.update_raw_value_column_visibility()
         
         print(f"Table created with {len(self.tree_items)} rows")
+
+    def update_raw_value_column_visibility(self):
+        """Show or hide the Raw Value column based on the checkbox setting"""
+        if not hasattr(self, 'tree'):
+            return
+        display_columns = list(self.table_columns)
+        if not self.show_raw_value_var.get():
+            display_columns = [col for col in display_columns if col != 'raw_value']
+        self.tree.configure(displaycolumns=display_columns)
+        # Force combobox repositioning because column widths changed
+        self.combobox_positioned = False
+        self.root.after_idle(self.position_comboboxes_stable)
+
+    def toggle_raw_value_column(self):
+        """Callback for checkbox toggling"""
+        self.update_raw_value_column_visibility()
     
     def initialize_table_rows(self):
         """Initialize table rows for configured fields with transformation dropdowns"""
