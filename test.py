@@ -61,68 +61,67 @@ def parse_units(value: int) -> str:
     return "--"
 
 
+def entry(label: str, value: str, unit: str = "") -> str:
+    return { "label": label, "value": value, "unit": unit }
+
+
+def entryf(label: str, value: float, unit: str = "") -> str:
+    return { "label": label, "value": f"{value:.3f}", "unit": unit }
+
+
 def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mapping[str, object]]]:
     global _last_parse_error
 
-    rows = [
-        # Encoder
-        {"label": "Time", "value": "--", "unit": "s"},
-        {"label": "Motor Revs", "value": "--", "unit": "rev"},
-        {"label": "Radial Degrees", "value": "--", "unit": "deg"},
-
-
-        # Command
-        {"label": "Time", "value": "--", "unit": "s"},
-        {"label": "Units", "value": "--"},
-
-        {"label": "Commanded Steps", "value": "--", "unit": "steps"},
-        {"label": "Current Position in Units", "value": "--", "unit": "units"},
-
-        {"label": "Units per Revolution", "value": "--", "unit": "units/rev"},
-
-
-        
-    ]
-
     encoder = lines.get("encoder")
-    command = lines.get("command")
-
-    try:
-        if encoder:
-            encoder_time = to_int(encoder, index=0)
-            encoder_counts = to_float(encoder, 1)
-            encoder_motor_revs = encoder_counts / 1600.0
-            encoder_radial_degrees = (encoder_counts / 1600.0) * 10.0
-
-            rows[0]["value"] = str(encoder_time)
-            rows[1]["value"] = f"{encoder_motor_revs:.3f}"
-            rows[2]["value"] = f"{encoder_radial_degrees:.3f}"
-
-            # 2725,  -- time
-            # 0,     -- units
-            # 2700,  -- commanded steps
-            # 8.44,  -- current position in units
-            # 5.00   -- units per revolution
-
-        if command:
-            command_time              = to_int(command, index=0)
-            command_units             = to_int(command, 1)
-            command_steps             = to_float(command, index=2)
-            command_curr_pos_in_units = to_float(command, index=3)
-            command_units_per_rev     = to_float(command, index=4)
-
-            rows[3]["value"] = str(command_time)
-            rows[4]["value"] = parse_units(command_units)
-
-            rows[5]["value"] = f"{command_steps}"
-            rows[6]["value"] = f"{command_curr_pos_in_units:.3f}"
-            
-            rows[7]["value"] = f"{command_units_per_rev:.3f}"
-
-
+    axis = lines.get("axis")
 
     
+    rows = []
+    try:
+        # Axis line format:
+        #
+        # 2725,  -- time
+        # 0,     -- units (0=mm,1=in,2=deg)
+        # 2700,  -- steps
+        # 8.44,  -- current position in units
+        # 5.00   -- units per revolution
 
+        if not encoder and not axis:
+            raise ParseError("No data received from either axis or encoder")
+
+        axis_time              = to_int(axis, index=0)
+        axis_units             = to_int(axis, 1)
+        axis_steps             = to_float(axis, index=2)
+        axis_curr_pos_in_units = to_float(axis, index=3)
+        axis_units_per_rev     = to_float(axis, index=4)
+
+        rows.append(entry("Axis Time", str(axis_time), "s"))
+        rows.append(entry("Axis Units", parse_units(axis_units)))
+
+        rows.append(entryf("Axis Steps", axis_steps, "steps"))
+        rows.append(entryf("Axis Position in Units", axis_curr_pos_in_units, "units"))
+        rows.append(entryf("Axis Units per Revolution", axis_units_per_rev, "units/rev"))
+
+        # Encoder line format:
+        #
+        # 2725,  -- time
+        # 1600   -- counts of encoder 1
+        # 1600   -- counts of encoder 2 (not really used in this demo)
+
+        enc_time   = to_int(encoder, index=0)
+        enc_counts = to_float(encoder, index=1)
+        enc_revs   = enc_counts / 1600.0
+
+        rows.append(entry("Encoder Time", str(enc_time), "s"))
+        rows.append(entry("Encoder Counts", enc_counts, "counts"))
+        rows.append(entryf("Encoder Revolutions", enc_revs, "rev"))
+
+        # I want to show encoder position in units as well, so I compute it here:
+        # I have to take into account the units!
+        if axis_units_per_rev != 0:
+            enc_pos_in_units = enc_revs * axis_units_per_rev
+            rows.append(entryf("Encoder Position in Units", enc_pos_in_units, "units"))
+    
 
 
     except ParseError as exc:
@@ -136,7 +135,7 @@ if __name__ == '__main__':
     run(
         {
             "encoder": {"device": "/dev/ttyUSB0", "baudrate": 115200},
-            "command": {"device": "/dev/ttyUSB1", "baudrate": 115200},
+            "axis": {"device": "/dev/ttyUSB1", "baudrate": 115200},
         },
         render=render,
         poll_interval=0.5,
