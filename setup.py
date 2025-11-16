@@ -8,7 +8,8 @@ version = '0.1.%s' % int(time.time())
 SCRIPTS = []
 
 DEPENDENCIES = [
-    'pyserial>=3.5'
+    'pyserial>=3.5',
+    'textual>=0.33.0'
 ]
 
 

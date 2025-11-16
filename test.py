@@ -91,6 +91,8 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mappi
 
         axis_time              = to_int(axis, index=0)
         axis_units             = to_int(axis, 1)
+        axis_units_str         = parse_units(axis_units)
+
         axis_steps             = to_float(axis, index=2)
         axis_curr_pos_in_units = to_float(axis, index=3)
         axis_units_per_rev     = to_float(axis, index=4)
@@ -118,9 +120,9 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mappi
 
         # I want to show encoder position in units as well, so I compute it here:
         # I have to take into account the units!
-        if axis_units_per_rev != 0:
-            enc_pos_in_units = enc_revs * axis_units_per_rev
-            rows.append(entryf("Encoder Position in Units", enc_pos_in_units, "units"))
+        
+        enc_expected_pos_in_units = enc_revs * axis_units_per_rev
+        rows.append(entryf("Encoder Position in Units", enc_expected_pos_in_units, axis_units_str))
     
 
 

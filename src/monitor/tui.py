@@ -1,19 +1,63 @@
-"""Lightweight curses display that renders user-provided observables."""
+"""Terminal UI that renders user-provided observables.
+
+By default the dashboard is powered by the `textual` library which provides a
+more discoverable and interactive interface than the previous curses-only
+implementation. The legacy curses dashboard is still available as a fallback
+when `textual` is not installed or when callers provide a custom renderer via
+`set_renderer`.
+"""
 
 from __future__ import annotations
 
 import atexit
+import contextlib
 import curses
+import os
+import queue
+import signal
 import sys
 import threading
 import time
-from typing import Callable, Iterable, List, Mapping, Optional
+from typing import Callable, Iterable, Iterator, List, Mapping, Optional
+
+try:  # textual is optional and only used when available
+    from textual.app import App, ComposeResult
+    from textual.widgets import DataTable, Footer, Header, Static
+
+    _TEXTUAL_AVAILABLE = True
+except Exception:  # pragma: no cover - textual might not be installed
+    App = object  # type: ignore
+    ComposeResult = object  # type: ignore
+    _TEXTUAL_AVAILABLE = False
 
 
 
 DisplayItems = List[Mapping[str, object]]
 Renderer = Callable[[object, DisplayItems], None]
 HeadlessRenderer = Callable[[DisplayItems], None]
+
+
+@contextlib.contextmanager
+def _suppress_signal_errors() -> Iterator[None]:
+    """
+    Textual installs a number of SIG* handlers which fail when run outside the
+    main thread. When we run the dashboard on a worker thread we silently skip
+    these registrations to avoid crashing the whole program.
+    """
+
+    original = signal.signal
+
+    def safe_signal(signum, handler):
+        try:
+            return original(signum, handler)
+        except ValueError:
+            return handler
+
+    signal.signal = safe_signal  # type: ignore[assignment]
+    try:
+        yield
+    finally:
+        signal.signal = original  # type: ignore[assignment]
 
 
 class _DisplayManager:
@@ -27,6 +71,10 @@ class _DisplayManager:
         self._quit_callbacks: List[Callable[[], None]] = []
         self._renderer: Optional[Renderer] = None
         self._headless_renderer: Optional[HeadlessRenderer] = None
+        textual_flag = (os.environ.get("OKIMOTUS_MONITOR_TEXTUAL") or "").strip().lower()
+        self._textual_disabled = textual_flag in {"0", "false", "no", "off"}
+        self._textual_queue: "queue.SimpleQueue" = queue.SimpleQueue()
+        self._textual_app: Optional["_MonitorDashboardApp"] = None
 
     def start(self):
         if self._headless:
@@ -34,27 +82,39 @@ class _DisplayManager:
         if self._thread and self._thread.is_alive():
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        target = self._run_textual if self._should_use_textual() else self._run_curses
+        self._thread = threading.Thread(target=target, daemon=True)
         self._thread.start()
 
     def stop(self):
         self._stop_event.set()
+        app = self._textual_app
+        if app is not None:
+            try:
+                app.call_from_thread(app.exit)
+            except Exception:
+                pass
         thread = self._thread
         if thread and thread.is_alive() and thread is not threading.current_thread():
             thread.join(timeout=1)
         self._thread = None
 
     def update(self, items: Iterable[Mapping[str, object]]):
+        snapshot = list(items)
         with self._lock:
-            self._items = list(items)
+            self._items = snapshot
         if self._headless:
             self._print_headless()
-        else:
-            self.start()
+            return
+        if self._should_use_textual():
+            self._textual_queue.put(snapshot)
+        self.start()
 
     def set_renderer(self, renderer: Optional[Renderer]):
         with self._lock:
             self._renderer = renderer
+        # Restart the UI so the change takes effect.
+        self.stop()
 
     def set_headless_renderer(self, renderer: Optional[HeadlessRenderer]):
         with self._lock:
@@ -96,7 +156,32 @@ class _DisplayManager:
         with self._lock:
             return list(self._items)
 
-    def _run(self):
+    def _should_use_textual(self) -> bool:
+        if not _TEXTUAL_AVAILABLE:
+            return False
+        if self._textual_disabled:
+            return False
+        with self._lock:
+            has_custom_renderer = self._renderer is not None
+        return not has_custom_renderer
+
+    def _run_textual(self):
+        if not _TEXTUAL_AVAILABLE:
+            self._run_curses()
+            return
+        try:
+            with _suppress_signal_errors():
+                app = _MonitorDashboardApp(self)
+                self._textual_app = app
+                app.run()
+        except Exception:
+            self._headless = True
+            self._print_headless()
+        finally:
+            self._textual_app = None
+            self._stop_event.set()
+
+    def _run_curses(self):
         try:
             curses.wrapper(self._loop)
         except curses.error:
@@ -167,6 +252,174 @@ class _DisplayManager:
                 stdscr.addnstr(row, 0, line.ljust(max_width), max_width, color)
                 row += 1
         stdscr.refresh()
+
+
+if _TEXTUAL_AVAILABLE:
+
+    class _MonitorDashboardApp(App):
+        """Textual dashboard that renders the latest monitor rows."""
+
+        CSS = """
+        Screen {
+            background: #101010;
+        }
+
+        #status {
+            padding: 0 1;
+            color: $text-muted;
+        }
+
+        #table {
+            height: 1fr;
+            margin: 1 1 0 1;
+        }
+
+        #help-panel {
+            margin: 1;
+            border: round #09c;
+            padding: 1;
+        }
+
+        .hidden {
+            display: none;
+        }
+        """
+
+        BINDINGS = [
+            ("q", "quit_app", "Quit"),
+            ("p", "toggle_pause", "Pause/resume"),
+            ("s", "toggle_sort", "Toggle sort"),
+            ("?", "toggle_help", "Help"),
+        ]
+
+        def __init__(self, manager: _DisplayManager):
+            super().__init__()
+            self._manager = manager
+            self._paused = False
+            self._sort_alpha = False
+            self._latest: DisplayItems = []
+            self._last_update: float = 0.0
+            self._status_widget: Optional[Static] = None
+            self._help_widget: Optional[Static] = None
+            self._table: Optional[DataTable] = None
+
+        def compose(self) -> ComposeResult:
+            yield Header(show_clock=True)
+
+            status = Static("", id="status")
+            self._status_widget = status
+            yield status
+
+            table = DataTable(id="table")
+            table.cursor_type = "row"
+            try:
+                table.zebra_stripes = True
+            except Exception:
+                pass
+            self._table = table
+            yield table
+
+            help_panel = Static(self._help_text(), id="help-panel")
+            help_panel.display = False
+            self._help_widget = help_panel
+            yield help_panel
+
+            yield Footer()
+
+        def on_mount(self):
+            if self._table is None:
+                return
+            self._table.add_columns("Label", "Value", "Unit")
+            self._table.focus()
+            self.set_interval(0.1, self._pull_updates)
+            self._refresh_status()
+
+        def _pull_updates(self):
+            changed = False
+            while True:
+                try:
+                    rows = self._manager._textual_queue.get_nowait()
+                except queue.Empty:
+                    break
+                else:
+                    self._latest = list(rows)
+                    self._last_update = time.time()
+                    changed = True
+            if changed and not self._paused:
+                self._render_items()
+            elif changed:
+                self._refresh_status()
+
+        def _render_items(self):
+            if self._table is None:
+                return
+            self._table.clear()
+            for entry in self._sorted_items():
+                label = str(entry.get("label", "")).replace("\x00", " ").strip() or "observable"
+                value = str(entry.get("value", "")).replace("\x00", " ")
+                unit = str(entry.get("unit", "") or "").replace("\x00", " ")
+                self._table.add_row(label, value, unit)
+            self._refresh_status()
+
+        def _sorted_items(self) -> DisplayItems:
+            if not self._sort_alpha:
+                return list(self._latest)
+            return sorted(self._latest, key=lambda row: str(row.get("label", "")).lower())
+
+        def _refresh_status(self):
+            if not self._status_widget:
+                return
+            parts = ["PAUSED" if self._paused else "LIVE"]
+            parts.append("Sort: A→Z" if self._sort_alpha else "Sort: Monitor order")
+            parts.append(f"Rows: {len(self._latest)}")
+            if self._last_update:
+                age = max(0.0, time.time() - self._last_update)
+                parts.append(f"Updated {age:.1f}s ago")
+            self._status_widget.update(" | ".join(parts))
+
+        def action_toggle_pause(self):
+            self._paused = not self._paused
+            if not self._paused:
+                self._render_items()
+            else:
+                self._refresh_status()
+
+        def action_toggle_sort(self):
+            self._sort_alpha = not self._sort_alpha
+            if not self._paused:
+                self._render_items()
+            else:
+                self._refresh_status()
+
+        def action_toggle_help(self):
+            if not self._help_widget:
+                return
+            self._help_widget.display = not self._help_widget.display
+
+        def action_quit_app(self):
+            self._manager._stop_event.set()
+            self._manager._emit_quit()
+            self.exit()
+
+        @staticmethod
+        def _help_text() -> str:
+            return (
+                "Controls\n"
+                "--------\n"
+                "q : Quit the monitor\n"
+                "p : Pause/resume automatic updates\n"
+                "s : Toggle between original and alphabetical ordering\n"
+                "? : Toggle this help panel\n"
+            )
+
+
+else:
+
+    class _MonitorDashboardApp:  # pragma: no cover - textual optional fallback
+        """Placeholder used when textual isn't available."""
+
+        def __init__(self, *_args, **_kwargs):
+            raise RuntimeError("textual is not available")
 
 
 _display = _DisplayManager()
