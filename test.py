@@ -97,7 +97,7 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mappi
         axis_curr_pos_in_units = to_float(axis, index=3)
         axis_units_per_rev     = to_float(axis, index=4)
 
-        rows.append(entry("Axis Time", str(axis_time), "s"))
+        rows.append(entry("Axis Time", str(axis_time), "ms"))
         rows.append(entry("Axis Units", parse_units(axis_units)))
 
         rows.append(entryf("Axis Steps", axis_steps, "steps"))
