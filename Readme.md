@@ -104,6 +104,72 @@ finally:
 - When stdout is not attached to a real TTY, `monitor.out()` simply prints the observables to standard output.
 - `monitor.run(...)` hands a dictionary of the latest `SerialLine` objects (or `None` if a port has not produced data yet) to your `render()` callback; return rows or raise `StopIteration` when you want to quit.
 
+## Customizing the Dashboard
+The default dashboard renders a single two-column list, but you can take over the
+entire curses surface if you need separators, multi-column layouts, or custom
+styling. Register a renderer once and every subsequent `monitor.out(...)` call
+will feed data into your function:
+
+```python
+import curses
+from itertools import zip_longest
+
+from collections import OrderedDict
+from monitor import run, set_renderer
+
+
+def dashboard_renderer(stdscr, items):
+    def format_entry(entry: dict) -> str:
+        label = str(entry.get("label", "")).strip()
+        value = str(entry.get("value", "")).strip()
+        unit = entry.get("unit")
+        suffix = f" {unit}" if unit else ""
+        return f"{label:<18} {value}{suffix}"
+
+    stdscr.erase()
+    height, width = stdscr.getmaxyx()
+
+    title = " Okimotus Monitor "
+    stdscr.addnstr(0, 0, f"{title:=^{width-1}}", width-1, curses.color_pair(1) | curses.A_BOLD)
+
+    row = 2
+    col_gap = 2
+    col_width = max(20, (width - col_gap) // 2)
+
+    sections: "OrderedDict[str, list]" = OrderedDict()
+    for entry in items:
+        section = str(entry.get("section") or "Observables")
+        sections.setdefault(section, []).append(entry)
+
+    for section, section_items in sections.items():
+        if row >= height - 1:
+            break
+        stdscr.addnstr(row, 0, f"[ {section} ]", width-1, curses.color_pair(3) | curses.A_BOLD)
+        row += 1
+        stdscr.hline(row, 0, curses.ACS_HLINE, width-1)
+        row += 1
+
+        for left, right in zip_longest(section_items[::2], section_items[1::2]):
+            if row >= height - 1:
+                break
+            if left:
+                stdscr.addnstr(row, 0, format_entry(left)[:col_width], col_width, curses.color_pair(2))
+            if right:
+                stdscr.addnstr(row, col_width + col_gap, format_entry(right)[:col_width], col_width, curses.color_pair(2))
+            row += 1
+        row += 1
+
+    stdscr.refresh()
+
+
+set_renderer(dashboard_renderer)
+run({...}, render=render)  # your existing render() function
+```
+
+Pass `None` to `set_renderer(None)` to restore the built-in layout. When stdout
+is not attached to a TTY you can also override the headless output via
+`monitor.set_headless_renderer(...)`.
+
 ## Serial Data Expectations
 - Each MCU line must end with `\n` and use `,` to separate values (no quoting rules, whitespace is stripped automatically).
 - Missing fields are ignored; parsing failures skip the faulty line without crashing your script.

@@ -11,6 +11,11 @@ from typing import Callable, Iterable, List, Mapping, Optional
 
 
 
+DisplayItems = List[Mapping[str, object]]
+Renderer = Callable[[object, DisplayItems], None]
+HeadlessRenderer = Callable[[DisplayItems], None]
+
+
 class _DisplayManager:
     def __init__(self, refresh_interval: float = 0.2):
         self.refresh_interval = max(0.05, refresh_interval)
@@ -20,6 +25,8 @@ class _DisplayManager:
         self._thread: Optional[threading.Thread] = None
         self._headless = not sys.stdout.isatty()
         self._quit_callbacks: List[Callable[[], None]] = []
+        self._renderer: Optional[Renderer] = None
+        self._headless_renderer: Optional[HeadlessRenderer] = None
 
     def start(self):
         if self._headless:
@@ -45,6 +52,14 @@ class _DisplayManager:
         else:
             self.start()
 
+    def set_renderer(self, renderer: Optional[Renderer]):
+        with self._lock:
+            self._renderer = renderer
+
+    def set_headless_renderer(self, renderer: Optional[HeadlessRenderer]):
+        with self._lock:
+            self._headless_renderer = renderer
+
     def register_quit_callback(self, callback: Callable[[], None]) -> Callable[[], None]:
         self._quit_callbacks.append(callback)
 
@@ -65,6 +80,13 @@ class _DisplayManager:
 
     def _print_headless(self):
         snapshot = self._snapshot()
+        renderer = self._headless_renderer
+        if renderer is not None:
+            try:
+                renderer(snapshot)
+            except Exception:
+                pass
+            return
         lines = [f"{entry.get('label', '--')}: {entry.get('value', '')}" for entry in snapshot]
         if not lines:
             lines = ["(no data)"]
@@ -107,6 +129,18 @@ class _DisplayManager:
         self._stop_event.set()
 
     def _render(self, stdscr, items: List[Mapping[str, object]]):
+        renderer = None
+        with self._lock:
+            renderer = self._renderer
+        if renderer is None:
+            renderer = self._default_renderer
+        try:
+            renderer(stdscr, items)
+        except Exception:
+            if renderer is not self._default_renderer:
+                self._default_renderer(stdscr, items)
+
+    def _default_renderer(self, stdscr, items: List[Mapping[str, object]]):
         stdscr.erase()
         height, width = stdscr.getmaxyx()
         max_width = max(1, width - 1)
@@ -152,3 +186,23 @@ def shutdown():
 def on_quit(callback: Callable[[], None]) -> Callable[[], None]:
     """Register a callback that fires when the user presses 'q'."""
     return _display.register_quit_callback(callback)
+
+
+def set_renderer(renderer: Optional[Renderer]):
+    """
+    Override the curses renderer used to draw the dashboard.
+
+    Pass None to restore the built-in renderer. The callable receives the active
+    curses window and the latest items list.
+    """
+    _display.set_renderer(renderer)
+
+
+def set_headless_renderer(renderer: Optional[HeadlessRenderer]):
+    """
+    Override the fallback renderer used when stdout is not a TTY.
+
+    Pass None to restore the simple text output. The callable receives the
+    latest items list.
+    """
+    _display.set_headless_renderer(renderer)
