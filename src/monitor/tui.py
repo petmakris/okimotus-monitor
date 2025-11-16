@@ -7,7 +7,30 @@ import curses
 import sys
 import threading
 import time
-from typing import Iterable, List, Mapping, Optional
+from typing import Callable, Iterable, List, Mapping, Optional
+
+
+def to_int(line, index: int) -> int:
+    raw = line.get(index)
+    if raw is None:
+        return None
+    try:
+        return int(str(raw).strip() or 0)
+    except ValueError:
+        return None
+
+
+def to_float(line, index: int) -> float:
+    raw = line.get(index)
+    if raw is None:
+        return None
+    try:
+        return float(str(raw).strip())
+    except ValueError:
+        try:
+            return float(int(str(raw).strip(), 10))
+        except ValueError:
+            return None
 
 
 class _DisplayManager:
@@ -18,6 +41,7 @@ class _DisplayManager:
         self._stop_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
         self._headless = not sys.stdout.isatty()
+        self._quit_callbacks: List[Callable[[], None]] = []
 
     def start(self):
         if self._headless:
@@ -42,6 +66,24 @@ class _DisplayManager:
             self._print_headless()
         else:
             self.start()
+
+    def register_quit_callback(self, callback: Callable[[], None]) -> Callable[[], None]:
+        self._quit_callbacks.append(callback)
+
+        def _remove():
+            try:
+                self._quit_callbacks.remove(callback)
+            except ValueError:
+                pass
+
+        return _remove
+
+    def _emit_quit(self):
+        for callback in list(self._quit_callbacks):
+            try:
+                callback()
+            except Exception:
+                pass
 
     def _print_headless(self):
         snapshot = self._snapshot()
@@ -81,6 +123,7 @@ class _DisplayManager:
             ch = stdscr.getch()
             if ch in (ord('q'), ord('Q')):
                 self._stop_event.set()
+                self._emit_quit()
                 break
             time.sleep(self.refresh_interval)
         self._stop_event.set()
@@ -120,14 +163,14 @@ atexit.register(lambda: _display.stop())
 
 def out(items: Iterable[Mapping[str, object]]):
     """Update the on-screen display with a new set of label/value pairs."""
-
     _display.update(items)
 
 
 def shutdown():
     """Stop the terminal UI thread (useful for clean exits)."""
-
     _display.stop()
 
 
-__all__ = ["out", "shutdown"]
+def on_quit(callback: Callable[[], None]) -> Callable[[], None]:
+    """Register a callback that fires when the user presses 'q'."""
+    return _display.register_quit_callback(callback)

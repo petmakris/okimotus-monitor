@@ -27,7 +27,7 @@ class SerialPort:
         self._reader = SerialReader(self.port, self.baudrate, **kwargs)
         self._closed = False
 
-    def readline(self, timeout: Optional[float] = None) -> Optional[SerialLine]:
+    def readline(self, timeout: Optional[float] = 0.15) -> Optional[SerialLine]:
         """Return the next parsed line (Mapping of index -> string).
 
         When no data is available before `timeout`, returns ``None``.
@@ -56,4 +56,3 @@ def get_port(port: str, baudrate: int = 115200, **serial_kwargs) -> SerialPort:
     return SerialPort(port=port, baudrate=baudrate, serial_kwargs=serial_kwargs)
 
 
-__all__ = ["SerialPort", "get_port"]

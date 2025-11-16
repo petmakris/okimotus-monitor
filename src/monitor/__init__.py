@@ -1,7 +1,15 @@
-"""Okimotus Monitor package."""
+"""Okimotus Monitor public API."""
 
-from .sdk import SerialPort, get_port
+from .sdk import SerialPort, get_port, serve
 from .serial_reader import SerialLine
-from .tui import out, shutdown
+from .tui import on_quit, out, shutdown
 
-__all__ = ["SerialPort", "SerialLine", "get_port", "out", "shutdown"]
+__all__ = [
+    "SerialPort",
+    "SerialLine",
+    "get_port",
+    "serve",
+    "out",
+    "shutdown",
+    "on_quit",
+]
