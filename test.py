@@ -3,9 +3,10 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Optional
 
-from monitor import get_port, out, shutdown
+from monitor import get_port, on_quit, out, shutdown
 
 
 def to_int(line, index: int, default: int = 0) -> int:
@@ -50,9 +51,11 @@ def parse_units(value: int) -> str:
 def main():
     encoder_port = get_port('/dev/ttyUSB0', baudrate=115200)
     command_port = get_port('/dev/ttyUSB1', baudrate=115200)
+    stop_event = threading.Event()
+    remove_quit_callback = on_quit(stop_event.set)
 
     try:
-        while True:
+        while not stop_event.is_set():
             rows = [
                 {"label": "Motor Revs (Encoder)", "value": "--"},
                 {"label": "Radial Degrees (Encoder)", "value": "--"},
@@ -62,8 +65,8 @@ def main():
                 # {"label": "Units / Motor Rev", "value": "--"},
             ]
 
-            encoder_line = encoder_port.readline()
-            command_line = command_port.readline()
+            encoder_line = encoder_port.readline(timeout=0.1)
+            command_line = command_port.readline(timeout=0.1)
 
             if encoder_line:
                 encoder_counts = to_float(encoder_line, 1)
@@ -86,7 +89,11 @@ def main():
 
             # out(rows)
 
+    except KeyboardInterrupt:
+        stop_event.set()
     finally:
+        remove_quit_callback()
+        stop_event.set()
         shutdown()
         encoder_port.close()
         command_port.close()
