@@ -1,6 +1,5 @@
 """Okimotus Monitor public API."""
 
-from .sdk import SerialPort, get_port, serve
+from .sdk import PortConfig, SerialPort, get_port, run, serve
 from .serial_reader import SerialLine
 from .tui import on_quit, out, shutdown
-

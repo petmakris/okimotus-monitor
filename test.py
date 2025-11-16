@@ -3,10 +3,9 @@
 
 from __future__ import annotations
 
-import threading
-from typing import Optional
+from typing import Iterable, Mapping, Optional
 
-from monitor import get_port, on_quit, out, shutdown
+from monitor import SerialLine, run
 
 
 def to_int(line, index: int, default: int = 0) -> int:
@@ -37,65 +36,51 @@ def to_float(line, index: int, default: float = 0.0) -> float:
 
 
 def parse_units(value: int) -> str:
-    if (value == 1): 
+    if value == 0:
         return "mm"
-    elif (value == 2):
+    if value == 1:
         return "in"
-    elif (value == 3):
+    if value == 2:
         return "deg"
-    else:
-        return "--"
+    return "--"
 
 
+def render(lines: Mapping[str, Optional[SerialLine]]) -> Iterable[Mapping[str, object]]:
+    rows = [
+        {"label": "Motor Revs (Encoder)", "value": "--"},
+        {"label": "Radial Degrees (Encoder)", "value": "--"},
+        {"label": "Units", "value": "--"},
+        {"label": "Radial Degrees (Cmd)", "value": "--"},
+    ]
 
-def main():
-    encoder_port = get_port('/dev/ttyUSB0', baudrate=115200)
-    command_port = get_port('/dev/ttyUSB1', baudrate=115200)
-    stop_event = threading.Event()
-    remove_quit_callback = on_quit(stop_event.set)
+    encoder = lines.get("encoder")
+    command = lines.get("command")
 
-    try:
-        while not stop_event.is_set():
-            rows = [
-                {"label": "Motor Revs (Encoder)", "value": "--"},
-                {"label": "Radial Degrees (Encoder)", "value": "--"},
+    if encoder:
+        encoder_counts = to_float(encoder, 1)
+        encoder_motor_revs = encoder_counts / 1600.0
+        encoder_radial_degrees = (encoder_counts / 1600.0) * 10.0
 
-                {"label": "Units", "value": "--"},
-                {"label": "Radial Degrees (Cmd)", "value": "--"},
-                # {"label": "Units / Motor Rev", "value": "--"},
-            ]
+        rows[0]["value"] = f"{encoder_motor_revs:.3f} rev"
+        rows[1]["value"] = f"{encoder_radial_degrees:.3f} deg"
 
-            encoder_line = encoder_port.readline(timeout=0.50)
-            command_line = command_port.readline(timeout=0.50)
+    if command:
+        command_counts = to_float(command, index=2)
+        command_dynamic_scale = to_float(command, index=5, default=10.0)
+        radial_degrees = (command_counts / 1600.0) * command_dynamic_scale
 
-            if encoder_line:
-                encoder_counts = to_float(encoder_line, 1)
-                encoder_motor_revs = encoder_counts / 1600.0
-                encoder_radial_degrees = (encoder_counts / 1600.0) * 10.0
+        rows[2]["value"] = parse_units(to_int(command, 1))
+        rows[3]["value"] = f"{radial_degrees:.3f} deg"
 
-                rows[0] = {"label": "Motor Revs (Encoder)", "value": f"{encoder_motor_revs:.3f} rev"}
-                rows[1] = {"label": "Radial Degrees (Encoder)", "value": f"{encoder_radial_degrees:.3f} deg"}
-
-            if command_line:
-                command_counts = to_float(command_line, index=2)
-                command_dynamic_scale = to_float(command_line, index=5, default=10.0)
-                radial_degrees = (command_counts / 1600.0) * command_dynamic_scale
-
-                rows[2] = {"label": "Units", "value": parse_units(to_int(command_line, 1))}
-                rows[3] = {"label": "Radial Degrees (Cmd)", "value": f"{radial_degrees:.3f} deg"}
-            
-            out(rows)
-
-
-    except KeyboardInterrupt:
-        stop_event.set()
-    finally:
-        remove_quit_callback()
-        stop_event.set()
-        shutdown()
-        encoder_port.close()
-        command_port.close()
+    return rows
 
 
 if __name__ == '__main__':
-    main()
+    run(
+        {
+            "encoder": {"device": "/dev/ttyUSB0", "baudrate": 115200},
+            "command": {"device": "/dev/ttyUSB1", "baudrate": 115200},
+        },
+        render=render,
+        poll_interval=0.5,
+    )

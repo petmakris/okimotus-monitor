@@ -19,6 +19,51 @@ pip install -e .
 ```
 
 ## Quick Start
+Use `monitor.run(...)` when you want the library to own the life-cycle (Ctrl+C,
+pressing `q`, shutting down ports, etc.). Provide a `render()` function that
+receives the latest line from every configured device and returns the rows the
+dashboard should display:
+
+```python
+from monitor import run
+
+def render(lines):
+    encoder = lines.get("encoder")
+    command = lines.get("command")
+
+    rows = [
+        {"label": "Motor Revs (Encoder)", "value": "--"},
+        {"label": "Radial Degrees (Encoder)", "value": "--"},
+        {"label": "Units", "value": "--"},
+        {"label": "Radial Degrees (Cmd)", "value": "--"},
+    ]
+
+    if encoder:
+        counts = float(encoder.get(1, 0))
+        rows[0]["value"] = f"{counts / 1600.0:.3f} rev"
+        rows[1]["value"] = f"{(counts / 1600.0) * 10.0:.3f} deg"
+
+    if command:
+        units = int(command.get(1, 0))
+        scale = float(command.get(5, 10.0) or 10.0)
+        rows[2]["value"] = {1: "mm", 2: "in", 3: "deg"}.get(units, "--")
+        rows[3]["value"] = f"{(float(command.get(2, 0)) / 1600.0) * scale:.3f} deg"
+
+    return rows
+
+
+run(
+    {
+        "encoder": {"device": "/dev/ttyUSB0", "baudrate": 115200},
+        "command": ("/dev/ttyUSB1", 115200),
+    },
+    render=render,
+    poll_interval=0.5,
+)
+```
+
+If you prefer to handle the control flow yourself you still can:
+
 ```python
 from monitor import get_port, out, shutdown
 
@@ -46,6 +91,7 @@ finally:
 ```
 
 ## API Highlights
+- `monitor.run(port_configs, render, poll_interval=0.05)` → opens every configured device, feeds lines into your `render()` callback, updates the UI, and shuts everything down on exit.
 - `monitor.get_port(path, baudrate=115200, **serial_kwargs)` → returns a `SerialPort` object.
 - `SerialPort.readline(timeout=None)` → blocking call that yields a `SerialLine` mapping (`{index: 'value'}`) or `None` on timeout.
 - `SerialPort.close()` (or use it as a context manager) → stops the background thread and closes the device.
@@ -56,6 +102,7 @@ finally:
 - `SerialLine` behaves like a dictionary, has `.raw` (the original CSV text), `.timestamp`, `.line_number`, and `.values` (a copy of the parsed mapping).
 - The dashboard starts the first time you call `monitor.out()`. Press `q` inside the terminal to hide it; calling `monitor.out()` later will show it again.
 - When stdout is not attached to a real TTY, `monitor.out()` simply prints the observables to standard output.
+- `monitor.run(...)` hands a dictionary of the latest `SerialLine` objects (or `None` if a port has not produced data yet) to your `render()` callback; return rows or raise `StopIteration` when you want to quit.
 
 ## Serial Data Expectations
 - Each MCU line must end with `\n` and use `,` to separate values (no quoting rules, whitespace is stripped automatically).
