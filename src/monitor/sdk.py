@@ -106,12 +106,20 @@ def serve(
         for name, config in normalized.items()
     }
 
+    sleep_interval = max(0.0, poll_interval)
+
     try:
         while not loop_stop.is_set():
+            did_work = False
             for name, port in ports.items():
-                line = port.readline(timeout=poll_interval)
+                line = port.readline(timeout=0)
                 if line is not None:
+                    did_work = True
                     handler(name, line)
+            if loop_stop.is_set():
+                break
+            if not did_work and sleep_interval:
+                loop_stop.wait(sleep_interval)
     except KeyboardInterrupt:
         loop_stop.set()
     finally:

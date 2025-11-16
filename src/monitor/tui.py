@@ -10,28 +10,6 @@ import time
 from typing import Callable, Iterable, List, Mapping, Optional
 
 
-def to_int(line, index: int) -> int:
-    raw = line.get(index)
-    if raw is None:
-        return None
-    try:
-        return int(str(raw).strip() or 0)
-    except ValueError:
-        return None
-
-
-def to_float(line, index: int) -> float:
-    raw = line.get(index)
-    if raw is None:
-        return None
-    try:
-        return float(str(raw).strip())
-    except ValueError:
-        try:
-            return float(int(str(raw).strip(), 10))
-        except ValueError:
-            return None
-
 
 class _DisplayManager:
     def __init__(self, refresh_interval: float = 0.2):
