@@ -65,19 +65,23 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mappi
     global _last_parse_error
 
     rows = [
+        # Encoder
         {"label": "Time", "value": "--", "unit": "s"},
         {"label": "Motor Revs", "value": "--", "unit": "rev"},
         {"label": "Radial Degrees", "value": "--", "unit": "deg"},
 
 
+        # Command
         {"label": "Time", "value": "--", "unit": "s"},
         {"label": "Units", "value": "--"},
 
         {"label": "Commanded Steps", "value": "--", "unit": "steps"},
         {"label": "Current Position in Units", "value": "--", "unit": "units"},
 
+        {"label": "Units per Revolution", "value": "--", "unit": "units/rev"},
 
-        {"label": "Radial Degrees", "value": "--", "unit": "deg"},
+
+        
     ]
 
     encoder = lines.get("encoder")
@@ -94,24 +98,32 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Optional[Iterable[Mappi
             rows[1]["value"] = f"{encoder_motor_revs:.3f}"
             rows[2]["value"] = f"{encoder_radial_degrees:.3f}"
 
-        if command:
-            command_time = to_int(command, index=0)
-            command_units = to_int(command, 1)
-            command_steps = to_float(command, index=2)
-            command_current_pos_in_units = to_float(command, index=3)
+            # 2725,  -- time
+            # 0,     -- units
+            # 2700,  -- commanded steps
+            # 8.44,  -- current position in units
+            # 5.00   -- units per revolution
 
-            # command_dynamic_scale = to_float(command, index=5)
-            
-            # radial_degrees = (command_steps / 1600.0) * command_dynamic_scale
+        if command:
+            command_time              = to_int(command, index=0)
+            command_units             = to_int(command, 1)
+            command_steps             = to_float(command, index=2)
+            command_curr_pos_in_units = to_float(command, index=3)
+            command_units_per_rev     = to_float(command, index=4)
 
             rows[3]["value"] = str(command_time)
             rows[4]["value"] = parse_units(command_units)
 
-
             rows[5]["value"] = f"{command_steps}"
-            rows[6]["value"] = f"{command_current_pos_in_units:.3f}"
-
+            rows[6]["value"] = f"{command_curr_pos_in_units:.3f}"
             
+            rows[7]["value"] = f"{command_units_per_rev:.3f}"
+
+
+
+    
+
+
 
     except ParseError as exc:
         print(f"Parse error: {exc}")
