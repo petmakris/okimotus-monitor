@@ -5,13 +5,10 @@ from setuptools import find_packages, setup
 project_name = 'okimotus-monitor'
 version = '0.1.%s' % int(time.time())
 
-SCRIPTS = [
-    'monitor=monitor.monitor:main'
-]
+SCRIPTS = []
 
 DEPENDENCIES = [
-    'pyserial>=3.5',
-    'pyyaml>=5.1'
+    'pyserial>=3.5'
 ]
 
 

@@ -3,11 +3,41 @@
 import logging
 import threading
 import time
-from typing import List, Dict, Any, Optional, Callable
-from queue import Queue, Empty
+from queue import Empty, Full, Queue
+from typing import List, Dict, Any, Optional, Callable, Iterator, Mapping
 
 import serial
 from serial.tools.list_ports import comports
+
+
+class SerialLine(Mapping[int, str]):
+    """Represents a parsed line along with raw text and metadata."""
+
+    def __init__(self, values: Dict[int, str], raw: str, timestamp: float, line_number: int):
+        self.values = values
+        self.raw = raw
+        self.timestamp = timestamp
+        self.line_number = line_number
+
+    def __getitem__(self, key: int) -> str:
+        return self.values[key]
+
+    def __iter__(self) -> Iterator[int]:
+        return iter(self.values)
+
+    def __len__(self) -> int:
+        return len(self.values)
+
+    def get(self, key: int, default: Optional[str] = None) -> Optional[str]:
+        return self.values.get(key, default)
+
+    def to_dict(self) -> Dict[int, str]:
+        """Return a copy of the parsed values as a regular dictionary."""
+        return dict(self.values)
+
+    def copy(self) -> "SerialLine":
+        """Clone the line, ensuring downstream consumers can't mutate shared state."""
+        return SerialLine(values=dict(self.values), raw=self.raw, timestamp=self.timestamp, line_number=self.line_number)
 
 
 class SerialDataParser:
@@ -43,7 +73,7 @@ class SerialDataParser:
 class SerialReader:
     """Serial port reader with background thread"""
     
-    def __init__(self, port: str, baudrate: int = 115200, **serial_kwargs):
+    def __init__(self, port: str, baudrate: int = 115200, *, queue_size: int = 1024, **serial_kwargs):
         self.port = port
         self.baudrate = baudrate
         self.serial_kwargs = serial_kwargs
@@ -55,15 +85,18 @@ class SerialReader:
         self._reader_thread: Optional[threading.Thread] = None
         
         # Data callbacks
-        self._data_callbacks: List[Callable[[Dict[int, str]], None]] = []
+        self._data_callbacks: List[Callable[[SerialLine], None]] = []
         self._error_callbacks: List[Callable[[Exception], None]] = []
+
+        # Queue for consumer-facing reads
+        self._data_queue: "Queue[SerialLine]" = Queue(maxsize=max(1, queue_size))
         
         # Statistics
         self.lines_received = 0
         self.lines_parsed = 0
         self.last_line_time = 0
     
-    def add_data_callback(self, callback: Callable[[Dict[int, str]], None]):
+    def add_data_callback(self, callback: Callable[[SerialLine], None]):
         """Add callback for new data"""
         self._data_callbacks.append(callback)
     
@@ -110,13 +143,30 @@ class SerialReader:
         """Stop background reading thread"""
         if not self._running:
             return
-        
+
         self._running = False
         if self._reader_thread:
             self._reader_thread.join(timeout=2)
-        
+
         self.disconnect()
         logging.info("Stopped serial reading thread")
+
+    def close(self):
+        """Public alias for stop_reading to match file-like semantics."""
+        self.stop_reading()
+
+    @property
+    def running(self) -> bool:
+        return self._running
+
+    def read_line(self, timeout: Optional[float] = None) -> Optional[SerialLine]:
+        """Blocking read that returns the next parsed line or None on timeout."""
+        if not self._running:
+            self.start_reading()
+        try:
+            return self._data_queue.get(timeout=timeout)
+        except Empty:
+            return None
     
     def _read_loop(self):
         """Main reading loop (runs in background thread)"""
@@ -164,17 +214,34 @@ class SerialReader:
             parsed_data = self.parser.parse_line(line)
             if parsed_data:
                 self.lines_parsed += 1
-                self._notify_data(parsed_data)
+                payload = SerialLine(
+                    values=parsed_data,
+                    raw=line,
+                    timestamp=self.last_line_time,
+                    line_number=self.lines_received
+                )
+                self._notify_data(payload)
         except Exception as e:
             logging.warning(f"Failed to parse line '{line}': {e}")
     
-    def _notify_data(self, data: Dict[int, str]):
+    def _notify_data(self, data: SerialLine):
         """Notify all data callbacks"""
         for callback in self._data_callbacks:
             try:
                 callback(data)
             except Exception as e:
                 logging.error(f"Error in data callback: {e}")
+        try:
+            self._data_queue.put_nowait(data.copy())
+        except Full:
+            try:
+                _ = self._data_queue.get_nowait()
+            except Empty:
+                pass
+            try:
+                self._data_queue.put_nowait(data.copy())
+            except Full:
+                pass
     
     def _notify_error(self, error: Exception):
         """Notify all error callbacks"""
@@ -239,7 +306,7 @@ class MultiPortSerialReader:
             self.readers[port] = SerialReader(port, baudrate, **serial_kwargs)
         
         # Callbacks
-        self._data_callbacks: List[Callable[[str, Dict[int, str]], None]] = []  # (port, data)
+        self._data_callbacks: List[Callable[[str, SerialLine], None]] = []  # (port, data)
         self._error_callbacks: List[Callable[[str, Exception], None]] = []  # (port, error)
         
         # Setup callbacks for each reader

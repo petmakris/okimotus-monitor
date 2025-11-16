@@ -1,73 +1,62 @@
 # Okimotus Monitor – AI Operator Guidelines
 
-This document is printed by `monitor --ai`. It is optimized for automated agents that need to reason about Okimotus Monitor without reading the full repository.
+This guide is printed via `python -c "import monitor, json; print('See CHEATSHEET_AI.md')"` (no console script). It summarizes how to embed Okimotus Monitor without inspecting the entire repository.
 
 ## Mission Overview
-- **Goal:** Display MCU telemetry streamed over serial ports (CSV rows) inside a Tkinter GUI with derived metrics.
-- **Entry point:** `monitor.monitor:main` (installed console script `monitor`).
-- **Runtime requirements:** CPython ≥ 3.7, Tk (bundled with python3-tk on Linux), `pyserial`, `pyyaml`.
+- **Goal:** Provide a tiny API for reading newline-separated CSV from serial ports and updating a curses dashboard from your own logic loop.
+- **Entry point:** import `monitor` inside your Python script; there is no standalone executable.
+- **Runtime requirements:** CPython ≥ 3.7, `pyserial`, and a curses backend (`windows-curses` on Windows).
 
-## Canonical Commands
-| Purpose | Command |
+## Primary API
+| Task | Call |
 | --- | --- |
-| List attached serial ports | `monitor --list` (add `-v` for hardware IDs) |
-| Emit sample config | `monitor --create-config > monitor.yaml` |
-| Launch GUI | `monitor --config monitor.yaml` |
-| Print this guide | `monitor --ai` |
+| Acquire a port | `port = monitor.get_port('/dev/ttyUSB0', baudrate=115200)` |
+| Read next CSV line | `line = port.readline(timeout=None)` (returns `SerialLine` or `None`) |
+| Show observables | `monitor.out([{"label": "RPM", "value": 3200}, ...])` |
+| Hide dashboard | `monitor.shutdown()` |
 
-The CLI refuses to run without `--config`. Use absolute or relative paths; no search heuristics exist.
+`SerialLine` implements `Mapping[int, str]` and exposes `.raw`, `.timestamp`, `.line_number`, and `.values` (a copy). Treat it like a dict: `line.get(2)` for column 2, etc.
 
-## Configuration Schema (YAML)
+## Usage Pattern (pseudo)
+```
+from monitor import get_port, out
 
-Root keys handled in `MonitorConfig` (`src/monitor/config.py`):
-- `title` *(string, optional)* – window title and banner text.
-- `window.width`, `window.height` *(ints)* – Tk geometry. Defaults: `800x600`.
-- `ports` *(mapping)* – **required**. Each key is a serial device (`/dev/ttyUSB0`, `COM4`, etc.).
-
-Per-port settings:
-- `baudrate` *(int, default 115200)*.
-- `values` *(list)* – entries describing CSV columns. Legacy dict form `index: {…}` is still supported, but prefer the list form because it makes ordering explicit.
-
-Each value entry allows:
-- `index` *(int)* – zero-based column index. Mandatory.
-- `label` *(string)* – row label. Defaults to `Field {index}`.
-- `type` *(string)* – `string`, `int`, or `float`; drives type conversion before formatting.
-- `format` *(string)* – Python format string applied to the converted value (default `{}`).
-- `unit` *(string)* – appended to the formatted value (with a space).
-- `color` *(string)* – must match one of `['red','green','blue','orange','purple','brown','pink','cyan','magenta','yellow','gray','black']` to affect the UI.
-- `python` *(string)* – evaluated expression or block. You may reference:
-  - `value` – the type‑converted value for the current column.
-  - `raw_value` – the original string.
-  - `field` – dictionary describing this field.
-  - `line` – `{column_index: raw_string}` for the current packet.
-  - `line_values` – same as `line`, but every element is auto-converted to `int`/`float` when possible.
-- `enabled` *(bool)* – include/exclude the field without removing it.
-
-`MonitorConfig.format_value` auto-applies type conversion, Python logic (if present), formatting, and unit concatenation. If conversion fails, the UI prints `'---'` and logs a warning.
+motor = get_port('/dev/ttyUSB0')
+with get_port('/dev/ttyUSB1', baudrate=921600) as phase:
+    while True:
+        a = motor.readline(timeout=0.5)
+        b = phase.readline(timeout=0.5)
+        if not a or not b:
+            continue
+        rpm = float(a.get(2, 0))
+        phase_error = float(b.get(4, 0)) / 1600 * 360
+        out([
+            {"label": "RPM", "value": f"{rpm:,.0f}"},
+            {"label": "Phase", "value": f"{phase_error:.2f} deg"},
+        ])
+```
 
 ## Data Flow Recap
-1. `MultiPortSerialReader` (in `serial_reader.py`) spawns a `SerialReader` per configured port.
-2. Each reader:
-   - opens the port with the configured `baudrate`,
-   - reads arbitrarily sized chunks, splits them at `\n`, and parses comma-separated fields (`SerialDataParser`).
-3. Parsed dictionaries (`{index: "value"}`) are pushed to the GUI via `SimpleMonitorGUI.on_serial_data`.
-4. GUI rows are pre-created from the YAML. Every incoming `(port, index)` pair updates the rows with the same `index`.
+1. `SerialReader` (in `serial_reader.py`) spawns a background thread per port, reading bytes, splitting on `\n`, and parsing comma-separated values into `SerialLine` objects.
+2. `SerialPort.readline()` pops the next `SerialLine` from an internal queue (blocking until data is available or the optional timeout expires).
+3. `monitor.out()` stores the caller-provided observables, starting a curses loop (thread) on the first update.
+4. The curses loop continuously redraws the latest label/value pairs; pressing `q` hides it. When stdout is not a TTY, `monitor.out()` simply prints the observables.
 
-**Important assumptions for agents:**
-- Incoming lines must be newline-terminated, comma-delimited ASCII/UTF-8 strings.
-- There is no flow control logic; the MCU must send at or below the host’s ability to parse.
-- The GUI is not headless; you can still work with config files and CLI output, but actual rendering requires a display.
+## Assumptions
+- Incoming telemetry must be newline-terminated ASCII/UTF-8 CSV with comma separators; no quoting or escaping.
+- There is no flow control or per-port throttling; the MCU must respect host throughput.
+- Background threads stop when `port.close()` or `monitor.shutdown()` is called (also triggered automatically at interpreter exit).
 
 ## Validation Checklist
-When editing configs programmatically:
-1. Ensure every port listed really exists during runtime (use `monitor --list` for discovery in scripts/tests).
-2. Guarantee each `values` entry includes `index` and that indexes match the CSV layout provided by firmware docs.
-3. For computed fields, prefer short expressions (e.g., `"value / 1000"`). If you need multi-line logic, set `python` to a multi-line string and assign the result to `result`.
-4. After writing a config, run `python -m yaml`/`yamllint` (optional) or at least `monitor --config your.yaml --list` to catch syntax problems before connecting hardware.
-5. Watch stdout: the CLI prints connection, port, and baudrate info plus warnings coming from Tk or pyserial.
+1. Confirm serial permissions (e.g., Linux `dialout` group) before running automation.
+2. Treat `SerialPort` as a context manager or call `.close()` explicitly; otherwise background threads linger.
+3. Avoid extremely small dashboard refresh intervals (<50 ms) when patching the library—`_DisplayManager` enforces a floor of 0.05 s.
+4. When unit testing, you can skip `monitor.out()` or mock it; headless environments fall back to stdout printing.
+5. If you need structured data beyond the dict view, use `SerialLine.raw` or `.timestamp` for diagnostics.
 
 ## Troubleshooting Notes
-- If the GUI reports “No ports configured,” it means your YAML `ports` map was empty or missing.
-- If all values show `---`, confirm the firmware sends more columns than referenced indexes, and check for stray `\r` or `\0` characters.
-- Exceptions in `python` snippets are caught; the system logs a warning and falls back to the unmodified value. Look at terminal output to debug.
-- The project does not bundle any firmware-specific scaling constants. All conversions must be encoded inside the YAML you control.
+- **`readline()` always returns `None`** – check cabling/baud rate; ensure the MCU emits lines terminated by `\n`.
+- **Garbled text** – UART mismatch or binary data; fix firmware serial settings.
+- **Dashboard never appears** – script may run without a TTY (Docker, CI); `monitor.out()` will print to stdout instead of using curses.
+- **"RuntimeError: SerialPort is closed"** – calling `readline()` after `.close()`; reopen with `get_port()`.
+- **Permission denied** – add user to platform-specific serial group and reconnect.
