@@ -1,17 +1,13 @@
-"""High-level API for Okimotus Monitor.
-
-This module provides two essentials:
-- `get_port()` for acquiring a streaming serial port whose `readline()` method
-  yields parsed CSV dictionaries.
-- `Display` helpers exposed via `monitor.out()` (implemented in `display.py`).
-"""
+"""High-level API for Okimotus Monitor."""
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Callable, Dict, Mapping, Optional
 
 from .serial_reader import SerialLine, SerialReader
+from .tui import on_quit, shutdown
 
 
 @dataclass
@@ -27,13 +23,7 @@ class SerialPort:
         self._reader = SerialReader(self.port, self.baudrate, **kwargs)
         self._closed = False
 
-    def readline(self, timeout: Optional[float] = 0.15) -> Optional[SerialLine]:
-        """Return the next parsed line (Mapping of index -> string).
-
-        When no data is available before `timeout`, returns ``None``.
-        Passing ``timeout=None`` blocks indefinitely until data arrives.
-        """
-
+    def readline(self, timeout: Optional[float] = None) -> Optional[SerialLine]:
         if self._closed:
             raise RuntimeError("SerialPort is closed")
         return self._reader.read_line(timeout=timeout)
@@ -51,8 +41,34 @@ class SerialPort:
 
 
 def get_port(port: str, baudrate: int = 115200, **serial_kwargs) -> SerialPort:
-    """Factory that returns a `SerialPort` instance ready for `.readline()` calls."""
-
     return SerialPort(port=port, baudrate=baudrate, serial_kwargs=serial_kwargs)
 
 
+def serve(port_configs: Mapping[str, int], handler: Callable[[str, SerialLine], None], *, poll_interval: float = 0.05):
+    if not port_configs:
+        raise ValueError("At least one port configuration is required")
+
+    stop_event = threading.Event()
+    remove_quit_callback = on_quit(stop_event.set)
+
+    ports = {name: get_port(name, baudrate) for name, baudrate in port_configs.items()}
+
+    try:
+        while not stop_event.is_set():
+            for name, port in ports.items():
+                line = port.readline(timeout=poll_interval)
+                if line is not None:
+                    handler(name, line)
+            if stop_event.is_set():
+                break
+    except KeyboardInterrupt:
+        pass
+    finally:
+        stop_event.set()
+        remove_quit_callback()
+        for port in ports.values():
+            port.close()
+        shutdown()
+
+
+__all__ = ["SerialPort", "get_port", "serve"]

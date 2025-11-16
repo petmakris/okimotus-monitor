@@ -65,8 +65,8 @@ def main():
                 # {"label": "Units / Motor Rev", "value": "--"},
             ]
 
-            encoder_line = encoder_port.readline(timeout=0.1)
-            command_line = command_port.readline(timeout=0.1)
+            encoder_line = encoder_port.readline(timeout=0.50)
+            command_line = command_port.readline(timeout=0.50)
 
             if encoder_line:
                 encoder_counts = to_float(encoder_line, 1)
@@ -75,6 +75,7 @@ def main():
 
                 rows[0] = {"label": "Motor Revs (Encoder)", "value": f"{encoder_motor_revs:.3f} rev"}
                 rows[1] = {"label": "Radial Degrees (Encoder)", "value": f"{encoder_radial_degrees:.3f} deg"}
+
             if command_line:
                 command_counts = to_float(command_line, index=2)
                 command_dynamic_scale = to_float(command_line, index=5, default=10.0)
@@ -84,10 +85,7 @@ def main():
                 rows[3] = {"label": "Radial Degrees (Cmd)", "value": f"{radial_degrees:.3f} deg"}
             
             out(rows)
-            # rows[4] = {"label": "Units / Motor Rev", "value": f"{units_per_rev:.3f}"}
 
-
-            # out(rows)
 
     except KeyboardInterrupt:
         stop_event.set()
