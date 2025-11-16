@@ -47,8 +47,11 @@ def parse_units(value: int) -> str:
 
 def render(lines: Mapping[str, Optional[SerialLine]]) -> Iterable[Mapping[str, object]]:
     rows = [
+        {"label": "Encoder time", "value": "--"},
         {"label": "Motor Revs (Encoder)", "value": "--"},
         {"label": "Radial Degrees (Encoder)", "value": "--"},
+
+        {"label": "Command time", "value": "--"},
         {"label": "Units", "value": "--"},
         {"label": "Radial Degrees (Cmd)", "value": "--"},
     ]
@@ -56,21 +59,28 @@ def render(lines: Mapping[str, Optional[SerialLine]]) -> Iterable[Mapping[str, o
     encoder = lines.get("encoder")
     command = lines.get("command")
 
+    if (encoder is None) and (command is None):
+        return rows
+
     if encoder:
+        encoder_time = to_int(encoder, index=0)
         encoder_counts = to_float(encoder, 1)
         encoder_motor_revs = encoder_counts / 1600.0
         encoder_radial_degrees = (encoder_counts / 1600.0) * 10.0
 
-        rows[0]["value"] = f"{encoder_motor_revs:.3f} rev"
-        rows[1]["value"] = f"{encoder_radial_degrees:.3f} deg"
+        rows[0]["value"] = f"{encoder_time}s"
+        rows[1]["value"] = f"{encoder_motor_revs:.3f} rev"
+        rows[2]["value"] = f"{encoder_radial_degrees:.3f} deg"
 
     if command:
+        command_time = to_int(command, index=0)
         command_counts = to_float(command, index=2)
         command_dynamic_scale = to_float(command, index=5, default=10.0)
         radial_degrees = (command_counts / 1600.0) * command_dynamic_scale
 
-        rows[2]["value"] = parse_units(to_int(command, 1))
-        rows[3]["value"] = f"{radial_degrees:.3f} deg"
+        rows[3]["value"] = f"{command_time}s"
+        rows[4]["value"] = parse_units(to_int(command, 1))
+        rows[5]["value"] = f"{radial_degrees:.3f} deg"
 
     return rows
 
