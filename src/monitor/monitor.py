@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 from monitor.config import MonitorConfig
 from monitor.gui import SimpleMonitorGUI as MonitorGUI
 from monitor.serial_reader import list_serial_ports
-import json
+import yaml
 
 
 def print_ai_cheatsheet():
@@ -41,7 +41,7 @@ def main():
     config_group = parser.add_argument_group("Configuration")
     config_group.add_argument(
         "-c", "--config",
-        help="Configuration file path (JSON format). Required to run the monitor."
+        help="Configuration file path (YAML format). Required to run the monitor."
     )
     config_group.add_argument(
         "--create-config",
@@ -99,7 +99,7 @@ def main():
         # Create example config and print to stdout
         config = MonitorConfig()
         example_config = config.create_example_config()
-        print(json.dumps(example_config, indent=2))
+        print(yaml.safe_dump(example_config, sort_keys=False))
         return
     
     # Load configuration
@@ -113,7 +113,7 @@ def main():
     try:
         if not os.path.exists(args.config):
             print(f"Configuration file not found: {args.config}")
-            print("Use --create-config to generate an example: monitor --create-config > config.json")
+            print("Use --create-config to generate an example: monitor --create-config > config.yaml")
             sys.exit(1)
         
         config = MonitorConfig(config_file=args.config)
@@ -129,15 +129,12 @@ def main():
             print("Warning: No ports configured in configuration file")
             print("Add port configurations to your config file. Example:")
             print("""
-{
-  "ports": {
-    "/dev/ttyUSB0": {
-      "baudrate": 115200,
-      "0": {"label": "Field 1", "type": "int"},
-      "1": {"label": "Field 2", "type": "float"}
-    }
-  }
-}
+ports:
+  /dev/ttyUSB0:
+    baudrate: 115200
+    values:
+      - {label: Field 1, index: 0, type: int}
+      - {label: Field 2, index: 1, type: float}
 """)
         
         gui = MonitorGUI(config)

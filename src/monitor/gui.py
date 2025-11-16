@@ -90,14 +90,10 @@ class SimpleMonitorGUI:
     def __init__(self, config: MonitorConfig):
         self.config = config
         self.serial_reader: Optional[MultiPortSerialReader] = None
-        self.tree_items: Dict[tuple, str] = {}  # (port, position) -> tree item id
-        self.field_data: Dict[tuple, Dict] = {}  # (port, position) -> field metadata
-        
-        # Transformation controls
-        self.transform_vars: Dict[tuple, tk.StringVar] = {}  # (port, position) -> selected transform
-        self.transform_combos: Dict[tuple, ttk.Combobox] = {}  # (port, position) -> combobox widget
-        self.combobox_positioned: bool = False  # Track if comboboxes have been positioned
-        self.pending_reposition: Optional[str] = None  # Track pending repositioning
+        self.tree_items: Dict[tuple, str] = {}  # (port, field_id) -> tree item id
+        self.field_data: Dict[tuple, Dict] = {}  # (port, field_id) -> field metadata
+        self.field_configs: Dict[tuple, Dict[str, Any]] = {}  # (port, field_id) -> config
+        self.field_keys_by_port_index: Dict[str, Dict[int, List[tuple]]] = {}
         
         # Simple flags
         self.running = True
@@ -137,9 +133,6 @@ class SimpleMonitorGUI:
         # Configure Treeview fonts
         style.configure('Treeview', font=self.table_font, rowheight=25)
         style.configure('Treeview.Heading', font=('Arial', 13, 'bold'))
-        
-        # Configure Combobox fonts
-        style.configure('Large.TCombobox', font=self.table_font)
         
         # Define color tags for field labels (will be applied after tree creation)
         self.color_tags = ['red', 'green', 'blue', 'orange', 'purple', 'brown', 
@@ -200,14 +193,14 @@ class SimpleMonitorGUI:
         print("UI setup completed")
     
     def create_data_table(self, parent):
-        """Create data table with transformation dropdowns"""
+        """Create data table for streaming MCU data"""
         table_frame = ttk.Frame(parent)
         table_frame.grid(row=2, column=0, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(0, 10))
         table_frame.columnconfigure(0, weight=1)
         parent.rowconfigure(2, weight=1)
         
-        # Enhanced columns with port and transformation selector
-        self.table_columns = ['port', 'field', 'raw_value', 'transformed_value', 'transform_select', 'status']
+        # Enhanced columns without transform selector
+        self.table_columns = ['port', 'field', 'raw_value', 'converted_value', 'status']
         
         self.tree = ttk.Treeview(table_frame, columns=self.table_columns, show='headings', height=15)
         
@@ -216,16 +209,13 @@ class SimpleMonitorGUI:
         self.tree.column('port', width=120, anchor='w')
         
         self.tree.heading('field', text='Field')
-        self.tree.column('field', width=130, anchor='w')
+        self.tree.column('field', width=150, anchor='w')
         
         self.tree.heading('raw_value', text='Raw Value')
         self.tree.column('raw_value', width=130, anchor='e')
         
-        self.tree.heading('transformed_value', text='Transformed Value')
-        self.tree.column('transformed_value', width=200, anchor='e')
-        
-        self.tree.heading('transform_select', text='Transform')
-        self.tree.column('transform_select', width=160, anchor='w')
+        self.tree.heading('converted_value', text='Value')
+        self.tree.column('converted_value', width=220, anchor='e')
         
         self.tree.heading('status', text='Status')
         self.tree.column('status', width=200, anchor='w')
@@ -245,12 +235,6 @@ class SimpleMonitorGUI:
         table_frame.rowconfigure(0, weight=1)
         table_frame.columnconfigure(0, weight=1)
         
-        # Bind only essential events for combobox repositioning
-        self.tree.bind('<Configure>', self.on_tree_configure)
-        self.tree.bind('<MouseWheel>', self.on_scroll)
-        self.tree.bind('<Button-4>', self.on_scroll)  # Linux scroll up
-        self.tree.bind('<Button-5>', self.on_scroll)  # Linux scroll down
-        
         # Initialize rows for each configured field
         self.initialize_table_rows()
         self.update_raw_value_column_visibility()
@@ -265,82 +249,55 @@ class SimpleMonitorGUI:
         if not self.show_raw_value_var.get():
             display_columns = [col for col in display_columns if col != 'raw_value']
         self.tree.configure(displaycolumns=display_columns)
-        # Force combobox repositioning because column widths changed
-        self.combobox_positioned = False
-        self.root.after_idle(self.position_comboboxes_stable)
 
     def toggle_raw_value_column(self):
         """Callback for checkbox toggling"""
         self.update_raw_value_column_visibility()
     
     def initialize_table_rows(self):
-        """Initialize table rows for configured fields with transformation dropdowns"""
+        """Initialize table rows for configured fields"""
         ports = self.config.get_ports()
         
         for port in ports:
-            positions = self.config.get_all_positions(port)
+            self.field_keys_by_port_index[port] = {}
+            fields = self.config.get_fields_for_port(port)
             
-            for position in positions:
-                field_config = self.config.get_field_config(port, position)
-                field_name = field_config.get('label', f'Field {position}') if field_config else f'Field {position}'
+            for field_config in fields:
+                if not field_config.get('enabled', True):
+                    continue
+                field_id = field_config.get('id')
+                if not field_id:
+                    # Fallback identifier for older configs lacking IDs
+                    field_id = f"{port}-{field_config.get('label', field_config.get('index'))}-{len(self.field_configs)}"
+                    field_config['id'] = field_id
+                
+                field_name = field_config.get('label', f"Field {field_config.get('index')}")
                 
                 # Get color for this field (default to black if not specified or invalid)
-                field_color = field_config.get('color', 'black') if field_config else 'black'
-                # Validate color is in our supported list
+                field_color = field_config.get('color', 'black')
                 if field_color not in self.color_tags:
                     field_color = 'black'
                 
-                # Create transformation options
-                transform_options = ["Raw Value"]  # Default option
-                transformations = field_config.get('transformations', []) if field_config else []
-                
-                for transform in transformations:
-                    label = transform.get('label', f'Transform {len(transform_options)}')
-                    transform_options.append(label)
-                
-                # Add "All Transforms" option if there are transformations
-                if transformations:
-                    transform_options.append("All Transforms (Final)")
-                
-                # Create StringVar for this field's transformation selection
-                key = (port, position)
-                self.transform_vars[key] = tk.StringVar()
-                
-                # Set default to "All Transforms" if available, otherwise "Raw Value"
-                default_selection = "All Transforms (Final)" if transformations else "Raw Value"
-                self.transform_vars[key].set(default_selection)
-                
-                # Insert row with placeholder for transform dropdown and color tag
+                key = (port, field_id)
                 item_id = self.tree.insert('', 'end', values=[
                     port,
-                    field_name, 
-                    '---', 
-                    '---', 
-                    '', # Placeholder for dropdown
+                    field_name,
+                    '---',
+                    '---',
                     'No data'
                 ], tags=(field_color,))
                 
-                # Store mapping
                 self.tree_items[key] = item_id
+                self.field_configs[key] = field_config
                 self.field_data[key] = {
                     'last_received_time': 0,
                     'last_changed_time': 0,
-                    'last_value': None,
-                    'transform_options': transform_options,
-                    'transformations': transformations
+                    'last_value': None
                 }
                 
-                # Create combobox for transformation selection (we'll position it later)
-                combo = ttk.Combobox(
-                    self.tree, 
-                    textvariable=self.transform_vars[key],
-                    values=transform_options,
-                    state='readonly',
-                    width=18,
-                    style='Large.TCombobox'
-                )
-                combo.bind('<<ComboboxSelected>>', lambda e, p=port, pos=position: self.on_transform_changed(p, pos))
-                self.transform_combos[key] = combo
+                source_index = field_config.get('index')
+                if source_index is not None:
+                    self.field_keys_by_port_index[port].setdefault(source_index, []).append(key)
     
     def setup_serial(self):
         """Setup serial connection for all configured ports"""
@@ -424,83 +381,29 @@ class SimpleMonitorGUI:
         except Exception as e:
             print(f"Error in on_serial_data: {e}")
     
-    def on_scroll(self, event):
-        """Handle scroll events - reposition comboboxes after scroll"""
-        # Cancel any pending repositioning
-        if self.pending_reposition:
-            self.root.after_cancel(self.pending_reposition)
-        
-        # Schedule repositioning with a small delay
-        self.pending_reposition = self.root.after(50, self.position_comboboxes_stable)
-
-    def on_tree_configure(self, event):
-        """Handle tree configure events with debouncing"""
-        # Only reposition if the size actually changed or it's the first time
-        if not self.combobox_positioned or (hasattr(event, 'width') and hasattr(event, 'height')):
-            # Cancel any pending repositioning
-            if self.pending_reposition:
-                self.root.after_cancel(self.pending_reposition)
-            
-            # Schedule repositioning with a small delay to debounce
-            self.pending_reposition = self.root.after(100, self.position_comboboxes_stable)
-
-    def on_transform_changed(self, port: str, position: int):
-        """Handle transformation selection change"""
-        try:
-            # Force a redraw with current data
-            key = (port, position)
-            if key in self.field_data and self.field_data[key]['last_value'] is not None:
-                # Get the last raw value if we have it
-                item_id = self.tree_items[key]
-                current_values = list(self.tree.item(item_id, 'values'))
-                if len(current_values) >= 3 and current_values[2] != '---':
-                    raw_value = current_values[2]
-                    self.update_single_field(port, position, raw_value)
-        except Exception as e:
-            print(f"Error handling transform change for port {port}, position {position}: {e}")
-
-    def get_transformed_value(self, port: str, position: int, raw_value: str) -> str:
-        """Get the transformed value based on current selection"""
-        try:
-            key = (port, position)
-            selected_transform = self.transform_vars[key].get()
-            field_info = self.field_data[key]
-            transformations = field_info.get('transformations', [])
-            
-            if selected_transform == "Raw Value":
-                return self.config.format_value(port, position, raw_value)
-            elif selected_transform == "All Transforms (Final)":
-                return self.config.apply_all_transformations(port, position, raw_value)
-            else:
-                # Find the specific transformation
-                transformation_steps = self.config.get_transformation_steps(port, position, raw_value)
-                for step in transformation_steps:
-                    if step['label'] == selected_transform:
-                        return step['formatted']
-                
-                # Fallback to raw value
-                return self.config.format_value(port, position, raw_value)
-                
-        except Exception as e:
-            print(f"Error getting transformed value for port {port}, position {position}: {e}")
-            return self.config.format_value(port, position, raw_value)
-
-    def update_single_field(self, port: str, position: int, raw_value: str):
+    def update_single_field(self, field_key: tuple, raw_value: str, line_data: Optional[Dict[int, str]] = None):
         """Update a single field with new data"""
         try:
             current_time = time.time()
-            key = (port, position)
-            item_id = self.tree_items[key]
-            field_info = self.field_data[key]
+            item_id = self.tree_items[field_key]
+            field_info = self.field_data[field_key]
+            field_config = self.field_configs.get(field_key)
+            if not field_config:
+                return
             
-            # Get transformed value based on current selection
-            transformed_value = self.get_transformed_value(port, position, raw_value)
+            # Format value using optional python conversion from config
+            line_snapshot = dict(line_data) if line_data else None
+            formatted_value = self.config.format_value(
+                field_config,
+                raw_value,
+                line_data=line_snapshot
+            )
             
             # Update timing
             field_info['last_received_time'] = current_time
-            if field_info['last_value'] != transformed_value:
+            if field_info['last_value'] != formatted_value:
                 field_info['last_changed_time'] = current_time
-                field_info['last_value'] = transformed_value
+                field_info['last_value'] = formatted_value
             
             # Create status
             status = f"rx: {time_ago(field_info['last_received_time'])}"
@@ -509,59 +412,30 @@ class SimpleMonitorGUI:
             
             # Get current values and update row
             current_values = list(self.tree.item(item_id, 'values'))
-            port_name = current_values[0]  # Keep port name
-            field_name = current_values[1]  # Keep field name
+            port_name = field_config.get('port', current_values[0])
+            field_name = field_config.get('label', current_values[1])
             
-            # Update row (leave transform column empty since we have the combobox)
-            self.tree.item(item_id, values=[port_name, field_name, raw_value, transformed_value, '', status])
+            self.tree.item(item_id, values=[port_name, field_name, raw_value, formatted_value, status])
             
         except Exception as e:
-            print(f"Error updating single field {port}:{position}: {e}")
+            port, field_id = field_key
+            print(f"Error updating single field {port}:{field_id}: {e}")
 
     def update_table_simple(self, port: str, data: Dict[int, str]):
-        """Update table with new data using transformations"""
+        """Update table with new data using python conversions"""
         try:
+            port_map = self.field_keys_by_port_index.get(port)
+            if not port_map:
+                return
+            
             for position, raw_value in data.items():
-                key = (port, position)
-                if key in self.tree_items:
-                    self.update_single_field(port, position, raw_value)
-                    
-            # Only position comboboxes if they haven't been positioned yet
-            if not self.combobox_positioned:
-                self.root.after_idle(self.position_comboboxes_stable)
+                field_keys = port_map.get(position, [])
+                for field_key in field_keys:
+                    if field_key in self.tree_items:
+                        self.update_single_field(field_key, raw_value, data)
                     
         except Exception as e:
             print(f"Error updating table: {e}")
-
-    def position_comboboxes_stable(self):
-        """Position all comboboxes with stability tracking"""
-        try:
-            # Clear pending reposition
-            self.pending_reposition = None
-            
-            for position, combo in self.transform_combos.items():
-                if position in self.tree_items:
-                    item_id = self.tree_items[position]
-                    bbox = self.tree.bbox(item_id, 'transform_select')
-                    if bbox:
-                        # Adjust position relative to the tree widget
-                        tree_x = self.tree.winfo_x()
-                        tree_y = self.tree.winfo_y()
-                        combo.place(x=tree_x + bbox[0] + 2, 
-                                   y=tree_y + bbox[1] + 2, 
-                                   width=bbox[2] - 4, 
-                                   height=bbox[3] - 4)
-                        combo.lift()  # Bring to front
-            
-            # Mark as positioned
-            self.combobox_positioned = True
-            
-        except Exception as e:
-            print(f"Error positioning comboboxes: {e}")
-
-    def position_comboboxes(self):
-        """Legacy method - kept for compatibility"""
-        self.position_comboboxes_stable()
     
     def on_serial_error(self, port: str, error: Exception):
         """Handle serial errors"""
@@ -572,16 +446,14 @@ class SimpleMonitorGUI:
         """Clear all values"""
         try:
             for key, item_id in self.tree_items.items():
-                current_values = list(self.tree.item(item_id, 'values'))
-                port_name = current_values[0]
-                field_name = current_values[1]
-                self.tree.item(item_id, values=[port_name, field_name, '---', '---', '', 'Cleared'])
+                field_config = self.field_configs.get(key, {})
+                port_name = field_config.get('port', key[0])
+                field_name = field_config.get('label', field_config.get('index', 'Field'))
+                self.tree.item(item_id, values=[port_name, field_name, '---', '---', 'Cleared'])
                 self.field_data[key] = {
                     'last_received_time': 0,
                     'last_changed_time': 0,
-                    'last_value': None,
-                    'transform_options': self.field_data[key].get('transform_options', []),
-                    'transformations': self.field_data[key].get('transformations', [])
+                    'last_value': None
                 }
             print("Values cleared")
         except Exception as e:
@@ -621,8 +493,8 @@ class SimpleMonitorGUI:
                     if field_info['last_changed_time'] > 0:
                         status += f" | ch: {time_ago(field_info['last_changed_time'])}"
                     
-                    # Only update status column (now at index 5)
-                    current_values[5] = status
+                    # Only update status column (now at index 4)
+                    current_values[4] = status
                     self.tree.item(item_id, values=current_values)
             
         except Exception as e:
@@ -638,10 +510,6 @@ class SimpleMonitorGUI:
         self.running = False
         
         try:
-            # Clean up comboboxes
-            for combo in self.transform_combos.values():
-                combo.destroy()
-            
             # Disconnect serial
             if self.serial_reader:
                 self.disconnect()
