@@ -18,7 +18,7 @@ import signal
 import sys
 import threading
 import time
-from typing import Callable, Iterable, Iterator, List, Mapping, Optional
+from typing import Callable, Iterable, Iterator, List, Mapping, Optional, Tuple
 
 try:  # textual is optional and only used when available
     from textual.app import App, ComposeResult
@@ -35,6 +35,29 @@ except Exception:  # pragma: no cover - textual might not be installed
 DisplayItems = List[Mapping[str, object]]
 Renderer = Callable[[object, DisplayItems], None]
 HeadlessRenderer = Callable[[DisplayItems], None]
+
+
+def _coerce_entry_parts(entry: Mapping[str, object]) -> Tuple[str, str, str, bool]:
+    """
+    Sanitize label/value/unit fields for rendering.
+
+    Returns (label, value, unit, is_blank) where `is_blank` is True when the
+    entry requests an empty spacer row by setting label=None.
+    """
+
+    if entry.get("label") is None:
+        return "", "", "", True
+
+    label_raw = entry.get("label", "")
+    label = str(label_raw).replace("\x00", " ").strip() or "observable"
+
+    value_raw = entry.get("value", "")
+    value = "" if value_raw is None else str(value_raw).replace("\x00", " ")
+
+    unit_raw = entry.get("unit", "") or ""
+    unit = "" if unit_raw is None else str(unit_raw).replace("\x00", " ")
+
+    return label, value, unit, False
 
 
 @contextlib.contextmanager
@@ -147,7 +170,13 @@ class _DisplayManager:
             except Exception:
                 pass
             return
-        lines = [f"{entry.get('label', '--')}: {entry.get('value', '')}" for entry in snapshot]
+        lines = []
+        for entry in snapshot:
+            label, value, _, is_blank = _coerce_entry_parts(entry)
+            if is_blank:
+                lines.append("")
+            else:
+                lines.append(f"{label or '--'}: {value}")
         if not lines:
             lines = ["(no data)"]
         print("\n".join(lines))
@@ -238,14 +267,27 @@ class _DisplayManager:
             stdscr.addnstr(2, 0, "Waiting for monitor.out(...) updates...", max_width, curses.color_pair(3))
         else:
             row = 2
-            label_width = min(32, max(16, max((len(str(e.get('label', ''))) for e in items), default=16)))
+            label_width = min(
+                32,
+                max(
+                    16,
+                    max(
+                        (
+                            len(_coerce_entry_parts(entry)[0])
+                            for entry in items
+                            if entry.get("label") is not None
+                        ),
+                        default=16,
+                    ),
+                ),
+            )
             for idx, entry in enumerate(items):
-                label = str(entry.get('label', '')).replace('\x00', ' ').strip() or 'observable'
-                value = entry.get('value', '')
-                unit = entry.get('unit', '')
-                value_str = str(value).replace('\x00', ' ')
-                unit_str = f" {unit}" if unit else ""
-                line = f"{label:<{label_width}} {value_str}{unit_str}".replace('\x00', ' ')
+                label, value_str, unit_str, is_blank = _coerce_entry_parts(entry)
+                if is_blank:
+                    line = ""
+                else:
+                    suffix = f" {unit_str}" if unit_str else ""
+                    line = f"{label:<{label_width}} {value_str}{suffix}".replace('\x00', ' ')
                 if row >= height - 1:
                     break
                 color = curses.color_pair(2 if idx % 2 == 0 else 3)
@@ -355,16 +397,20 @@ if _TEXTUAL_AVAILABLE:
                 return
             self._table.clear()
             for entry in self._sorted_items():
-                label = str(entry.get("label", "")).replace("\x00", " ").strip() or "observable"
-                value = str(entry.get("value", "")).replace("\x00", " ")
-                unit = str(entry.get("unit", "") or "").replace("\x00", " ")
-                self._table.add_row(label, value, unit)
+                label, value, unit, is_blank = _coerce_entry_parts(entry)
+                if is_blank:
+                    self._table.add_row("", "", "")
+                else:
+                    self._table.add_row(label, value, unit)
             self._refresh_status()
 
         def _sorted_items(self) -> DisplayItems:
             if not self._sort_alpha:
                 return list(self._latest)
-            return sorted(self._latest, key=lambda row: str(row.get("label", "")).lower())
+            return sorted(
+                self._latest,
+                key=lambda row: (1 if row.get("label") is None else 0, _coerce_entry_parts(row)[0].lower()),
+            )
 
         def _refresh_status(self):
             if not self._status_widget:
@@ -427,7 +473,12 @@ atexit.register(lambda: _display.stop())
 
 
 def out(items: Iterable[Mapping[str, object]]):
-    """Update the on-screen display with a new set of label/value pairs."""
+    """
+    Update the on-screen display with a new set of label/value pairs.
+
+    Pass entries with ``label=None`` to insert blank spacer rows between other
+    observables.
+    """
     _display.update(items)
 
 
